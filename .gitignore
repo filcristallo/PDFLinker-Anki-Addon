@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Add-on Specific (DO NOT COMMIT THESE)
+pdfjs/
+pdf_cache.json
+*.zip
+
+# OS Specific
+.DS_Store
+Thumbs.db

@@ -1,8 +1,9 @@
 {
     "package": "pdflinker",
     "name": "PDFLinker",
-    "mod": 1712126400,
+    "version": "1.0.0",
+    "mod": 0,
     "conflicts": [],
     "min_point_version": 45,
-    "max_point_version": 2404000
+    "max_point_version": 2500000
 }

@@ -53,6 +53,12 @@ For the auto-sync to work, ensure your Anki Note Type has the following fields:
 
 The add-on will look for fields named `Text` or `Front` to drop the question in, and `Extra` or `Back` for the explanation.
 
+## 💡 Pro-Tips
+
+When reviewing AI-generated cloze cards in the preview window, you can use these **double-click shortcuts** to edit cards at lightning speed:
+* **Un-cloze entirely:** Double-click on the `{{c1::` prefix of any cloze. The add-on will instantly delete the cloze brackets and the hint, leaving only the pure text behind!
+* **Delete just the hint:** Double-click on the `::hint` portion of the cloze. The add-on will instantly strip the hint away, leaving the cloze active but hint-free.
+
 ## ❓ FAQ
 
 **Q: If a deck is shared with someone else, how do they keep the same linked PDF pages?**

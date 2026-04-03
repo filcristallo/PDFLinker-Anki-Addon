@@ -30,7 +30,10 @@ except ImportError:
 ADDON_DIR = os.path.dirname(__file__)
 PDFJS_DIR = os.path.join(ADDON_DIR, "pdfjs")
 VIEWER_HTML_PATH = os.path.join(PDFJS_DIR, "web", "viewer.html")
-CACHE_FILE = os.path.join(ADDON_DIR, "pdf_cache.json")
+
+USER_FILES_DIR = os.path.join(ADDON_DIR, "user_files")
+CACHE_FILE = os.path.join(USER_FILES_DIR, "pdf_cache.json")
+
 PDFJS_RELEASE_URL = "https://github.com/mozilla/pdf.js/releases/download/v3.11.174/pdfjs-3.11.174-dist.zip"
 
 # Setup basic logging for the add-on
@@ -85,8 +88,10 @@ def get_cache_data() -> Dict[str, Any]:
     return {}
 
 def save_cache_data(data: Dict[str, Any]) -> None:
-    """Saves PDF page cache to disk."""
+    """Saves PDF page cache to disk in the protected user_files directory."""
     try:
+        os.makedirs(USER_FILES_DIR, exist_ok=True)
+        
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f)
     except Exception as e:

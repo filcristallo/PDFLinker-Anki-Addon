@@ -208,22 +208,25 @@ def auto_fill_open_editors(path: str, page: str) -> None:
 
 class CustomWebPage(QWebEnginePage):
     """Intercepts invisible messages sent from Javascript to Python."""
+    def __init__(self, viewer, parent=None):
+        super().__init__(parent)
+        self.viewer = viewer  # Now the page knows exactly which window it belongs to
+
     def javaScriptConsoleMessage(self, level, message: str, lineNumber: int, sourceID: str) -> None:
         if message.startswith("PDF_PAGE_CHANGED:"):
             page_num = message.split(":")[1]
-            if creator_viewer and creator_viewer.current_pdf_path:
-                auto_fill_open_editors(creator_viewer.current_pdf_path, page_num)
-                set_last_page(creator_viewer.current_pdf_path, page_num)
+            # Only auto-fill Anki fields if we are in Creator Mode
+            if self.viewer.mode == "create" and self.viewer.current_pdf_path:
+                auto_fill_open_editors(self.viewer.current_pdf_path, page_num)
+                set_last_page(self.viewer.current_pdf_path, page_num)
                 
         elif message.startswith("PDF_EXTRACT_FLASHCARD:"):
             text = message[len("PDF_EXTRACT_FLASHCARD:"):]
-            if creator_viewer:
-                creator_viewer.process_extracted_text(text, task="flashcard")
+            self.viewer.process_extracted_text(text, task="flashcard")
 
         elif message.startswith("PDF_EXTRACT_EXPLAIN:"):
             text = message[len("PDF_EXTRACT_EXPLAIN:"):]
-            if creator_viewer:
-                creator_viewer.process_extracted_text(text, task="explain")
+            self.viewer.process_extracted_text(text, task="explain")
                 
         super().javaScriptConsoleMessage(level, message, lineNumber, sourceID)
 
@@ -488,7 +491,6 @@ class ExplanationWindow(QMainWindow):
         if self.main_viewer:
             self.main_viewer.process_extracted_text(self.raw_explanation_text, task="flashcard")
 
-
 # ==========================================
 # MAIN VIEWER LOGIC
 # ==========================================
@@ -505,14 +507,19 @@ class PDFViewerWindow(QMainWindow):
         self.current_pdf_path = None 
         self.web_view = QWebEngineView(self)
         
+        # Link the custom page and pass 'self' so it knows which window is calling it
+        self.web_page = CustomWebPage(self, self.web_view)
+        self.web_view.setPage(self.web_page)
+        
+        # --- TOOLBAR SETUP (FOR BOTH MODES) ---
+        toolbar = QToolBar("PDF Toolbar", self)
+        toolbar.setMovable(False)
+        toolbar.toggleViewAction().setEnabled(False)
+        self.addToolBar(toolbar)
+
         if self.mode == "create":
             self.setWindowTitle("PDFLinker Reader (Creator Mode)")
             self.resize(1000, 1000)
-            
-            toolbar = QToolBar("PDF Toolbar", self)
-            toolbar.setMovable(False)
-            toolbar.toggleViewAction().setEnabled(False)
-            self.addToolBar(toolbar)
             
             open_action = QAction("📂 Open PDF for Study...", self)
             open_action.triggered.connect(self.open_local_pdf)
@@ -521,23 +528,22 @@ class PDFViewerWindow(QMainWindow):
             analyze_action = QAction("⚡ Generate Flashcards", self)
             analyze_action.triggered.connect(self.analyze_current_page)
             toolbar.addAction(analyze_action)
-            
-            explain_action = QAction("🧠 Explain", self)
-            explain_action.triggered.connect(self.explain_current_page)
-            toolbar.addAction(explain_action)
-            
-            # --- NEW: Support Button ---
-            toolbar.addSeparator()
-            support_action = QAction("☕ Buy me a coffee", self)
-            support_action.triggered.connect(self.open_support_link)
-            toolbar.addAction(support_action)
-            
-            self.web_page = CustomWebPage(self.web_view)
-            self.web_view.setPage(self.web_page)
         else:
             self.setWindowTitle("PDFLinker Reader (Review Mode)")
             self.resize(800, 1000)
 
+        # These buttons appear in BOTH modes
+        explain_action = QAction("🧠 Explain", self)
+        explain_action.triggered.connect(self.explain_current_page)
+        toolbar.addAction(explain_action)
+        
+        toolbar.addSeparator()
+        
+        support_action = QAction("☕ Buy me a coffee", self)
+        support_action.triggered.connect(self.open_support_link)
+        toolbar.addAction(support_action)
+        
+        # --- WEB ENGINE SETTINGS ---
         self.setCentralWidget(self.web_view)
         self.web_view.loadFinished.connect(self.on_load_finished)
         
@@ -736,7 +742,6 @@ class PDFViewerWindow(QMainWindow):
             
         self.deleteLater()
         event.accept()
-
 
 # ==========================================
 # TOGGLE & MENU REGISTRATION

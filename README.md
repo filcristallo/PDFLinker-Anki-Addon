@@ -18,16 +18,23 @@ PDFLinker is a powerful Anki add-on that bridges the gap between your study mate
 
 ## 🚀 Installation
 
-**Method 1: Quick Install (Recommended)**
+**Method 1: Install via AnkiWeb (Recommended)**
+The absolute easiest way to install PDFLinker and get automatic updates is through AnkiWeb.
+1. Open Anki and go to **Tools -> Add-ons**.
+2. Click **Get Add-ons...**
+3. Paste the code **`962234340`** and click OK.
+4. Restart Anki.
+*(You can view the official AnkiWeb page [here](https://ankiweb.net/shared/info/962234340)).*
+
+**Method 2: Install via GitHub Release**
 1. Go to the [Releases](../../releases/latest) page of this GitHub repository.
 2. Under the "Assets" section of the latest release, download the `pdflinker.ankiaddon` file.
 3. Double-click the downloaded file. Anki will automatically open and ask to install it. 
-   *(Alternatively, open Anki, go to **Tools -> Add-ons**, click **Install from file...**, and select the downloaded file).*
 4. Restart Anki.
 
-**Method 2: Manual Installation (For Developers)**
+**Method 3: Manual Installation (For Developers)**
 1. Clone this repository or download the source code `.zip`.
-2. Place the extracted folder into your Anki `addons21` directory. **Important:** Make sure the folder is named exactly `pdfinker` (no spaces, hyphens, or periods).
+2. Place the extracted folder into your Anki `addons21` directory. **Important:** Make sure the folder is named exactly `pdflinker` (no spaces, hyphens, or periods).
     * *Windows:* `%APPDATA%\Anki2\addons21`
     * *Mac:* `~/Library/Application Support/Anki2/addons21`
     * *Linux:* `~/.local/share/Anki2/addons21`

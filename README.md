@@ -1,10 +1,14 @@
 # PDFLinker: The Ultimate PDF Workflow for Anki
 
-This add-on is free, support me if you want!
+> **PDFLinker will always be 100% free.**
+> 
+> I built this tool to help us win back hundreds of hours of tedious flashcard creation. If PDFLinker has helped you save time, ace an exam, or just made your life a little easier, and you are in a position to do so—consider buying me a coffee! It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.
+> 
+> <a href="https://www.buymeacoffee.com/filippocristallo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
 
-<a href="https://www.buymeacoffee.com/filippocristallo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+<img width="1532" alt="PDFLinker Screenshot" src="https://github.com/user-attachments/assets/ce8b9b00-2d14-4923-a187-b869829753cb" />
 
-<img width="1532" height="1035" alt="Screenshot 2026-04-02 alle 10 33 15" src="https://github.com/user-attachments/assets/ce8b9b00-2d14-4923-a187-b869829753cb" />
+---
 
 PDFLinker is a powerful Anki add-on that bridges the gap between your study materials and your flashcards. Read PDFs directly within Anki, automatically generate high-quality cloze-deletion flashcards using the Gemini API, and instantly tie those flashcards back to the exact page they came from.
 
@@ -77,4 +81,4 @@ You are absolutely free to share, edit, modify, and distribute this code. The on
 
 See the [LICENSE](LICENSE) file for more details.
 
-<a href="https://www.buymeacoffee.com/filippocristallo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+<a href="https://www.buymeacoffee.com/filippocristallo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>

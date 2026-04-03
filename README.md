@@ -43,4 +43,8 @@ Contributions are welcome! If you want to improve the markdown parser, add new A
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+This project is open-source and licensed under the MIT License. 
+
+You are absolutely free to share, edit, modify, and distribute this code. The only requirement is that you must provide clear attribution by citing **Fil Cristallo** as the original author of the project and include the original license file in any forks or distributions. 
+
+See the [LICENSE](LICENSE) file for more details.

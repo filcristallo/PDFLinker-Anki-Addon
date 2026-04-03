@@ -1,5 +1,7 @@
 # PDFLinker: The Ultimate PDF Workflow for Anki
 
+<img width="1532" height="1035" alt="Screenshot 2026-04-02 alle 10 33 15" src="https://github.com/user-attachments/assets/ce8b9b00-2d14-4923-a187-b869829753cb" />
+
 PDFLinker is a powerful Anki add-on that bridges the gap between your study materials and your flashcards. Read PDFs directly within Anki, automatically generate high-quality cloze-deletion flashcards using the Gemini API, and instantly tie those flashcards back to the exact page they came from.
 
 ## ✨ Features

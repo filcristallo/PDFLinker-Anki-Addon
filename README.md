@@ -10,8 +10,9 @@ PDFLinker is a powerful Anki add-on that bridges the gap between your study mate
 
 ## ✨ Features
 
-* **Creator Mode:** Open a PDF, highlight complex text, and click a button to generate perfectly formatted Anki flashcards using Google's Gemini models.
-* **Auto-Fill Engine:** When you send generated cards to your Anki 'Add' window, PDFLinker automatically fills in custom `PDF_Path` and `PDF_Page` fields so you never lose your source.
+* **Manual Card Creation (No AI Required):** You don't have to use the AI! You can simply open a PDF, open your Anki 'Add' window, and type your flashcards manually. PDFLinker will still track your position and link the exact PDF page to your card.
+* **Creator Mode (AI Generation):** Open a PDF, highlight complex text, and click a button to generate perfectly formatted Anki flashcards using Google's Gemini models.
+* **Auto-Fill Engine:** Whether you send AI-generated cards to the 'Add' window or type them manually, PDFLinker automatically fills in custom `PDF_Path` and `PDF_Page` fields in real-time so you never lose your source.
 * **Review Mode:** When reviewing flashcards, the add-on reads the `PDF_Path` and `PDF_Page` fields and automatically pulls up the exact PDF page alongside your review window for instant context.
 * **AI Explanations:** Highlight confusing academic or medical text and ask the AI to break it down into plain language.
 * **Smart UI:** Double-click generated cloze deletions in the preview window to easily adjust or remove hints before sending them to Anki.

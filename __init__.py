@@ -556,9 +556,34 @@ class PDFViewerWindow(QMainWindow):
         self._load_empty_viewer()
 
     def open_support_link(self) -> None:
-        """Opens the Buy Me A Coffee link in the user's default web browser."""
-        import webbrowser
-        webbrowser.open("https://www.buymeacoffee.com/filippocristallo")
+        """Shows a psychologically optimized message before opening the link."""
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Support PDFLinker")
+        
+        pitch_text = (
+            "<h3>PDFLinker will always be 100% free and open source.</h3>"
+            "<p>I built this tool to help us win back hundreds of hours of tedious flashcard creation.</p>"
+            "<p>If PDFLinker has helped you save time, ace an exam, or just made your life a little easier, "
+            "and <b>you are in a position to do so</b>—consider buying me a coffee!</p>"
+            "<p>It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.</p>"
+        )
+        msg_box.setText(pitch_text)
+        
+        # Create custom buttons
+        support_btn = QPushButton("☕ Sure, I'll buy you a coffee!")
+        cancel_btn = QPushButton("Maybe later")
+        
+        # Add them to the message box
+        msg_box.addButton(support_btn, QMessageBox.ButtonRole.AcceptRole)
+        msg_box.addButton(cancel_btn, QMessageBox.ButtonRole.RejectRole)
+        
+        # Show the window and wait for the user to click
+        msg_box.exec()
+        
+        # If they clicked the support button, open the browser
+        if msg_box.clickedButton() == support_btn:
+            import webbrowser
+            webbrowser.open("https://www.buymeacoffee.com/filippocristallo")
 
     def _load_empty_viewer(self) -> None:
         if os.path.exists(VIEWER_HTML_PATH):

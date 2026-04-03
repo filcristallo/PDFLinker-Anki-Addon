@@ -53,6 +53,11 @@ For the auto-sync to work, ensure your Anki Note Type has the following fields:
 * `PDF_Path`
 * `PDF_Page`
 
+**📌 Crucial Step for the 'Add' Window:** When adding cards, open your Anki "Add" window and click the **Pin (Lock) icon** next to both the `PDF_Path` and `PDF_Page` fields. This tells Anki to "remember" the current PDF and page number so you don't lose your linked status when making multiple flashcards in a row!
+
+<img width="719" height="145" alt="image" src="https://github.com/user-attachments/assets/fef6635f-1fc9-4e6b-9605-cf0ce5d4df32" />
+
+
 The add-on will look for fields named `Text` or `Front` to drop the question in, and `Extra` or `Back` for the explanation.
 
 ## 💡 Pro-Tips

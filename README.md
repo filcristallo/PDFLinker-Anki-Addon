@@ -1,6 +1,6 @@
 # PDFLinker: The Ultimate PDF Workflow for Anki
 
-> **PDFLinker will always be 100% free.**
+> **PDFLinker will always be 100% free and open source.**
 > 
 > I built this tool to help us win back hundreds of hours of tedious flashcard creation. If PDFLinker has helped you save time, ace an exam, or just made your life a little easier, and you are in a position to do so—consider buying me a coffee! It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.
 > 

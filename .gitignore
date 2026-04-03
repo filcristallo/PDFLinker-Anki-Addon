@@ -11,7 +11,7 @@ __pycache__/
 
 # Add-on Specific (DO NOT COMMIT THESE)
 pdfjs/
-pdf_cache.json
+user_files/
 *.zip
 
 # OS Specific

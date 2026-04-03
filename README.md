@@ -59,6 +59,12 @@ For the auto-sync to work, ensure your Anki Note Type has the following fields:
 
 The add-on will look for fields named `Text` or `Front` to drop the question in, and `Extra` or `Back` for the explanation.
 
+## ❓ FAQ
+
+**Q: If a deck is shared with someone else, how do they keep the same linked PDF pages?**
+A: Because PDFLinker links to local files on your computer, anyone you share the deck with must have the exact same PDF saved in the **exact same file path**. 
+* *Pro-tip for sharing:* If you are studying with friends, keep your PDFs in a shared folder (like a root `C:\Study_PDFs` or a synced Dropbox folder) so the path is identical on everyone's computer. Otherwise, the person receiving the deck can use Anki's "Find and Replace" tool in the Browser to update the `PDF_Path` field to match where they saved the PDF on their own machine.
+
 ## 🤝 Contributing
 
 Contributions are welcome! If you want to improve the markdown parser, add new AI models, or refine the UI, please check out our [CONTRIBUTING.md](CONTRIBUTING.md).

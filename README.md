@@ -27,13 +27,7 @@ The absolute easiest way to install PDFLinker and get automatic updates is throu
 4. Restart Anki.
 *(You can view the official AnkiWeb page [here](https://ankiweb.net/shared/info/962234340)).*
 
-**Method 2: Install via GitHub Release**
-1. Go to the [Releases](../../releases/latest) page of this GitHub repository.
-2. Under the "Assets" section of the latest release, download the `pdflinker.ankiaddon` file.
-3. Double-click the downloaded file. Anki will automatically open and ask to install it. 
-4. Restart Anki.
-
-**Method 3: Manual Installation (For Developers)**
+**Method 2: Manual Installation (For Developers)**
 1. Clone this repository or download the source code `.zip`.
 2. Place the extracted folder into your Anki `addons21` directory. **Important:** Make sure the folder is named exactly `pdflinker` (no spaces, hyphens, or periods).
     * *Windows:* `%APPDATA%\Anki2\addons21`

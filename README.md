@@ -62,3 +62,5 @@ This project is open-source and licensed under the MIT License.
 You are absolutely free to share, edit, modify, and distribute this code. The only requirement is that you must provide clear attribution by citing **Fil Cristallo** as the original author of the project and include the original license file in any forks or distributions. 
 
 See the [LICENSE](LICENSE) file for more details.
+
+<a href="https://www.buymeacoffee.com/filippocristallo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>

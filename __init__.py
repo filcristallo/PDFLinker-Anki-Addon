@@ -521,6 +521,12 @@ class PDFViewerWindow(QMainWindow):
             explain_action.triggered.connect(self.explain_current_page)
             toolbar.addAction(explain_action)
             
+            # --- NEW: Support Button ---
+            toolbar.addSeparator()
+            support_action = QAction("☕ Buy me a coffee", self)
+            support_action.triggered.connect(self.open_support_link)
+            toolbar.addAction(support_action)
+            
             self.web_page = CustomWebPage(self.web_view)
             self.web_view.setPage(self.web_page)
         else:
@@ -537,6 +543,11 @@ class PDFViewerWindow(QMainWindow):
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
 
         self._load_empty_viewer()
+
+    def open_support_link(self) -> None:
+        """Opens the Buy Me A Coffee link in the user's default web browser."""
+        import webbrowser
+        webbrowser.open("https://www.buymeacoffee.com/filippocristallo")
 
     def _load_empty_viewer(self) -> None:
         if os.path.exists(VIEWER_HTML_PATH):
@@ -720,6 +731,7 @@ class PDFViewerWindow(QMainWindow):
             
         self.deleteLater()
         event.accept()
+
 
 # ==========================================
 # TOGGLE & MENU REGISTRATION

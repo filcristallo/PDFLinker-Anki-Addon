@@ -31,8 +31,6 @@ PDFLinker is a powerful Anki add-on that bridges the gap between your study mate
 
 *(Note: On its first run, PDFLinker will automatically download the required Mozilla PDF.js engine in the background).*
 
-*(Note: On its first run, PDFLinker will automatically download the required Mozilla PDF.js engine in the background).*
-
 ## ⚙️ Configuration
 
 To use the AI generation features, you need a free Google Gemini API key.

@@ -6,7 +6,8 @@ import urllib.parse
 import urllib.error
 import re
 import logging
-from typing import Optional, Dict, Any, List
+import webbrowser
+from typing import Optional, Dict, Any, List, Callable
 
 from aqt import mw
 from aqt.qt import *
@@ -33,8 +34,11 @@ VIEWER_HTML_PATH = os.path.join(PDFJS_DIR, "web", "viewer.html")
 
 USER_FILES_DIR = os.path.join(ADDON_DIR, "user_files")
 CACHE_FILE = os.path.join(USER_FILES_DIR, "pdf_cache.json")
+CONFIG_PATH = os.path.join(ADDON_DIR, "config.json")
 
 PDFJS_RELEASE_URL = "https://github.com/mozilla/pdf.js/releases/download/v3.11.174/pdfjs-3.11.174-dist.zip"
+GITHUB_URL = "https://github.com/filcristallo/PDFLinker-Anki-Addon"
+BUY_ME_COFFEE_URL = "https://www.buymeacoffee.com/filippocristallo"
 
 # Setup basic logging for the add-on
 logging.basicConfig(level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s')
@@ -72,11 +76,30 @@ def setup_dependencies() -> None:
 setup_dependencies()
 
 # ==========================================
+# CONFIGURATION MANAGEMENT
+# ==========================================
+
+def get_config() -> Dict[str, Any]:
+    return mw.addonManager.getConfig(__name__) or {}
+
+def save_config(conf: Dict[str, Any]) -> None:
+    mw.addonManager.writeConfig(__name__, conf)
+
+def is_first_run() -> bool:
+    conf = get_config()
+    # If the key 'first_run_complete' is missing or False, it's the first run
+    return not conf.get("first_run_complete", False)
+
+def mark_first_run_complete() -> None:
+    conf = get_config()
+    conf["first_run_complete"] = True
+    save_config(conf)
+
+# ==========================================
 # CACHE SYSTEM & TEXT FORMATTING
 # ==========================================
 
 def get_cache_data() -> Dict[str, Any]:
-    """Loads PDF page cache from disk."""
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
@@ -88,10 +111,8 @@ def get_cache_data() -> Dict[str, Any]:
     return {}
 
 def save_cache_data(data: Dict[str, Any]) -> None:
-    """Saves PDF page cache to disk in the protected user_files directory."""
     try:
         os.makedirs(USER_FILES_DIR, exist_ok=True)
-        
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f)
     except Exception as e:
@@ -106,21 +127,15 @@ def set_last_page(pdf_path: str, page: str) -> None:
     save_cache_data(cache)
 
 def clean_ai_text(text: str) -> str:
-    """Formats raw AI markdown text into Anki-ready HTML."""
     if not text:
         return ""
-    
-    # Try using the robust markdown library if Anki has it, including table support
     try:
         import markdown
         return markdown.markdown(text.strip(), extensions=['tables'])
     except ImportError:
-        logger.warning("Markdown library not found. Falling back to regex parser.")
+        pass
 
-    # Regex fallback for formatting markdown manually
     text = text.strip()
-    
-    # --- 0. Tables (Line-by-line parsing fallback) ---
     lines = text.split('\n')
     in_table = False
     html_lines = []
@@ -131,11 +146,8 @@ def clean_ai_text(text: str) -> str:
             if not in_table:
                 html_lines.append('<table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 15px;">')
                 in_table = True
-            
-            # Skip separator row (e.g., |---|---|)
             if re.match(r'^\|[\s\-\|:]+\|$', stripped_line):
                 continue
-                
             row_html = "<tr>"
             cells = [c.strip() for c in stripped_line.split('|')][1:-1]
             for cell in cells:
@@ -148,33 +160,26 @@ def clean_ai_text(text: str) -> str:
                 in_table = False
             html_lines.append(line)
             
-    if in_table:
-        html_lines.append('</table>')
-        
+    if in_table: html_lines.append('</table>')
     text = '\n'.join(html_lines)
     
-    # --- 1. Headers ---
     for i in range(6, 0, -1):
         hashes = '#' * i
         text = re.sub(fr'^{hashes}\s+(.*?)$', fr'<h{i}>\1</h{i}>', text, flags=re.MULTILINE)
     
-    # --- 2. Lists (Unordered & Ordered) ---
     text = re.sub(r'^(\s*)[-*+]\s+(.*?)$', r'<ul><li>\2</li></ul>', text, flags=re.MULTILINE)
     text = re.sub(r'^(\s*)\d+\.\s+(.*?)$', r'<ol><li>\2</li></ol>', text, flags=re.MULTILINE)
     text = re.sub(r'</ul>\s*<ul>', '', text)
     text = re.sub(r'</ol>\s*<ol>', '', text)
     
-    # --- 3. Bold & Italic ---
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text, flags=re.DOTALL)
     text = re.sub(r'__(.*?)__', r'<b>\1</b>', text, flags=re.DOTALL)
     text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
     text = re.sub(r'_(.*?)_', r'<i>\1</i>', text)
     
-    # --- 4. Paragraphs / Newlines ---
     text = text.replace('\n\n', '<br><br>')
     text = text.replace('\n', '<br>')
     
-    # Clean up stray <br> around block HTML elements
     block_elements = ['ul', 'ol', 'table', 'tr']
     for el in block_elements:
         text = re.sub(fr'<br>\s*<{el}', f'<{el}', text)
@@ -189,7 +194,6 @@ def clean_ai_text(text: str) -> str:
 # ==========================================
 
 def auto_fill_open_editors(path: str, page: str) -> None:
-    """Finds any open Anki Add/Edit window and updates the PDF fields."""
     for widget in mw.app.topLevelWidgets():
         editor = getattr(widget, 'editor', None)
         if editor and getattr(editor, 'note', None):
@@ -207,15 +211,13 @@ def auto_fill_open_editors(path: str, page: str) -> None:
                 editor.loadNote()
 
 class CustomWebPage(QWebEnginePage):
-    """Intercepts invisible messages sent from Javascript to Python."""
     def __init__(self, viewer, parent=None):
         super().__init__(parent)
-        self.viewer = viewer  # Now the page knows exactly which window it belongs to
+        self.viewer = viewer 
 
     def javaScriptConsoleMessage(self, level, message: str, lineNumber: int, sourceID: str) -> None:
         if message.startswith("PDF_PAGE_CHANGED:"):
             page_num = message.split(":")[1]
-            # Only auto-fill Anki fields if we are in Creator Mode
             if self.viewer.mode == "create" and self.viewer.current_pdf_path:
                 auto_fill_open_editors(self.viewer.current_pdf_path, page_num)
                 set_last_page(self.viewer.current_pdf_path, page_num)
@@ -231,11 +233,92 @@ class CustomWebPage(QWebEnginePage):
         super().javaScriptConsoleMessage(level, message, lineNumber, sourceID)
 
 # ==========================================
+# AI API MANAGER
+# ==========================================
+
+def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_success: Callable, on_error: Callable = None) -> None:
+    """Standalone function to call the Gemini API so it can be used from any window."""
+    if not extracted_text or not str(extracted_text).strip():
+        showInfo("No text provided for analysis.")
+        return
+        
+    config = get_config()
+    api_key = config.get("gemini_api_key", "")
+    if not api_key:
+        showInfo("Please set your 'gemini_api_key' in the PDFLinker config.")
+        return
+
+    model_name = config.get("gemini_model", "gemini-3-flash-preview")
+    thinking_level = config.get("thinking_level", "")
+    
+    if task == "flashcard":
+        prompt_template = config.get("ai_prompt", "")
+        mime_type = "application/json"
+    else:
+        prompt_template = config.get("explain_prompt", "Explain this text simply and clearly.")
+        mime_type = "text/plain"
+
+    if not model_name or not prompt_template:
+        showInfo("Please set 'gemini_model' and the respective prompt in your Anki add-on config.")
+        return
+        
+    tooltip("Calling AI... Please wait.", period=4000)
+    system_prompt = prompt_template.replace("{extracted_text}", "").strip()
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    
+    data = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": extracted_text}]}],
+        "generationConfig": {"response_mime_type": mime_type}
+    }
+    
+    if thinking_level:
+        data["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    
+    def fetch_from_api():
+        req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), method='POST')
+        req.add_header('Content-Type', 'application/json')
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            parts = result['candidates'][0]['content']['parts']
+            content_text = "".join(part.get("text", "") for part in parts if not part.get("thought", False))
+                    
+            if task == "flashcard":
+                cards_data = json.loads(content_text)
+                for card in cards_data:
+                    if 'text' in card: card['text'] = clean_ai_text(card['text'])
+                    if 'extra' in card: card['extra'] = clean_ai_text(card['extra'])
+                return cards_data
+            return content_text
+
+    def on_api_done(future):
+        try:
+            result_data = future.result()
+            on_success(result_data, extracted_text)
+        except urllib.error.HTTPError as e:
+            error_msg = f"HTTP Error calling AI API: {e.code} - {e.reason}"
+            if e.code == 404:
+                error_msg = f"Error 404: Model not found. Check if '{model_name}' is correct in config."
+            elif e.code == 400:
+                error_msg = f"Error 400 (Bad Request): The model '{model_name}' might not support the requested configuration."
+            logger.error(error_msg)
+            showInfo(error_msg)
+            if on_error: on_error(e)
+        except Exception as e:
+            logger.exception("AI API Call Failed")
+            msg = f"Error parsing AI response: {str(e)}\n\nThe AI might not have returned valid JSON." if task == "flashcard" else f"Error returning AI explanation: {str(e)}"
+            showInfo(msg)
+            if on_error: on_error(e)
+
+    mw.taskman.run_in_background(fetch_from_api, on_api_done)
+
+
+# ==========================================
 # UI COMPONENTS
 # ==========================================
 
 class ClozeTextEdit(QTextEdit):
-    """A custom QTextEdit that deletes cloze hints or entirely un-clozes text when double-clicked."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setStyleSheet("border: 1px solid rgba(128, 128, 128, 0.5); border-radius: 4px;")
@@ -262,7 +345,6 @@ class ClozeTextEdit(QTextEdit):
             last_colon_idx = cloze_text.rfind('::')
             has_hint = (last_colon_idx != -1 and last_colon_idx != first_colon_idx)
             
-            # 1. Clicked on the prefix? Un-cloze entirely.
             c_prefix_end = start + first_colon_idx + 2
             if start <= relative_pos <= c_prefix_end:
                 answer = cloze_text[first_colon_idx + 2 : last_colon_idx] if has_hint else cloze_text[first_colon_idx + 2 : -2]
@@ -272,7 +354,6 @@ class ClozeTextEdit(QTextEdit):
                 selection_cursor.insertText(answer)
                 return 
                 
-            # 2. Clicked on the hint? Delete just the hint.
             if has_hint:
                 hint_start = start + last_colon_idx
                 hint_end = end - 2 
@@ -287,12 +368,12 @@ class ClozeTextEdit(QTextEdit):
 
 
 class GeneratedCardsWindow(QMainWindow):
-    def __init__(self, main_viewer, cards_data: List[Dict], extracted_text: str, parent=None):
+    def __init__(self, regenerate_callback: Callable, cards_data: List[Dict], extracted_text: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI Generated Flashcards")
         self.resize(750, 600)
         
-        self.main_viewer = main_viewer
+        self.regenerate_callback = regenerate_callback
         self.cards_data = cards_data
         self.extracted_text = extracted_text
         
@@ -341,14 +422,12 @@ class GeneratedCardsWindow(QMainWindow):
             text_str = card.get('text', '')
             extra_str = card.get('extra', '')
             
-            # Setup Text Field
             text_label = QLabel("<b>Text:</b>")
             text_edit = ClozeTextEdit()
             text_edit.setHtml(text_str)
             text_edit.setMinimumHeight(70)
             text_edit.setMaximumHeight(200)
             
-            # Setup Extra Field
             extra_label = QLabel("<b>Extra:</b>")
             extra_edit = QTextEdit()
             extra_edit.setHtml(extra_str)
@@ -356,7 +435,6 @@ class GeneratedCardsWindow(QMainWindow):
             extra_edit.setMaximumHeight(200)
             extra_edit.setStyleSheet("border: 1px solid rgba(128, 128, 128, 0.5); border-radius: 4px;")
             
-            # Controls
             btn_layout = QHBoxLayout()
             btn_layout.setContentsMargins(0, 4, 0, 0)
             
@@ -383,10 +461,9 @@ class GeneratedCardsWindow(QMainWindow):
         self.scroll_area.setWidget(self.cards_container)
 
     def on_regenerate_all(self) -> None:
-        self.main_viewer.regenerate_all_cards(self.extracted_text)
+        self.regenerate_callback(self.extracted_text)
 
     def get_anki_html(self, text_edit: QTextEdit) -> str:
-        """Translates Qt styles to pure b, i, u tags and strips extra HTML."""
         html = text_edit.toHtml()
         body_match = re.search(r'<body[^>]*>(.*?)</body>', html, re.DOTALL | re.IGNORECASE)
         if not body_match:
@@ -457,12 +534,12 @@ class GeneratedCardsWindow(QMainWindow):
 
 
 class ExplanationWindow(QMainWindow):
-    def __init__(self, main_viewer, explanation_text: str, extracted_text: str, parent=None):
+    def __init__(self, main_viewer_callback: Callable, explanation_text: str, extracted_text: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI Explanation")
         self.resize(600, 500)
         
-        self.main_viewer = main_viewer
+        self.main_viewer_callback = main_viewer_callback
         self.raw_explanation_text = explanation_text
         
         self.central_widget = QWidget()
@@ -488,8 +565,227 @@ class ExplanationWindow(QMainWindow):
         self.text_browser.setHtml(formatted_text)
 
     def generate_cards_from_explanation(self) -> None:
-        if self.main_viewer:
-            self.main_viewer.process_extracted_text(self.raw_explanation_text, task="flashcard")
+        if self.main_viewer_callback:
+            self.main_viewer_callback(self.raw_explanation_text, task="flashcard")
+
+
+class TextToFlashcardWindow(QMainWindow):
+    """Allows users to paste arbitrary text and generate cards."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("PDFLinker - Text to Flashcards")
+        self.resize(600, 400)
+        
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+        
+        self.label = QLabel("<b>Paste text below to generate flashcards:</b>")
+        self.layout.addWidget(self.label)
+        
+        self.text_edit = QTextEdit()
+        self.layout.addWidget(self.text_edit)
+        
+        self.btn_layout = QHBoxLayout()
+        self.btn_layout.addStretch()
+        
+        self.generate_btn = QPushButton("⚡ Generate Flashcards")
+        self.generate_btn.clicked.connect(self.on_generate_clicked)
+        self.btn_layout.addWidget(self.generate_btn)
+        
+        self.layout.addLayout(self.btn_layout)
+
+    def on_generate_clicked(self):
+        text = self.text_edit.toPlainText().strip()
+        if not text:
+            showInfo("Please paste some text first.")
+            return
+        call_gemini_api(text, "flashcard", self, self.on_cards_generated)
+
+    def on_cards_generated(self, result_data, extracted_text):
+        if hasattr(self, 'generated_cards_window') and self.generated_cards_window.isVisible():
+            self.generated_cards_window.cards_data = result_data
+            self.generated_cards_window.extracted_text = extracted_text
+            self.generated_cards_window.populate_list()
+            tooltip("Flashcards Updated!", period=2000)
+        else:
+            self.generated_cards_window = GeneratedCardsWindow(
+                regenerate_callback=lambda txt: call_gemini_api(txt, "flashcard", self, self.on_cards_generated),
+                cards_data=result_data,
+                extracted_text=extracted_text,
+                parent=self
+            )
+            self.generated_cards_window.show()
+
+# ==========================================
+# CONFIG & FIRST-RUN GUIs
+# ==========================================
+
+class ConfigDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("PDFLinker Configuration")
+        self.resize(600, 700)
+        self.config = get_config()
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        form_layout = QFormLayout()
+        
+        self.api_key_input = QLineEdit(self.config.get("gemini_api_key", ""))
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit if hasattr(QLineEdit, 'EchoMode') else QLineEdit.PasswordEchoOnEdit)
+        form_layout.addRow("Gemini API Key:", self.api_key_input)
+        
+        self.model_input = QLineEdit(self.config.get("gemini_model", "gemini-3-flash-preview"))
+        form_layout.addRow("Gemini Model:", self.model_input)
+        
+        self.thinking_combo = QComboBox()
+        self.thinking_combo.addItems(["", "low", "high"])
+        current_thinking = self.config.get("thinking_level", "")
+        if current_thinking in ["", "low", "high"]:
+            self.thinking_combo.setCurrentText(current_thinking)
+        form_layout.addRow("Thinking Level:", self.thinking_combo)
+        
+        layout.addLayout(form_layout)
+        
+        layout.addWidget(QLabel("<b>AI Flashcard Prompt:</b>"))
+        self.ai_prompt_input = QTextEdit(self.config.get("ai_prompt", ""))
+        layout.addWidget(self.ai_prompt_input)
+        
+        layout.addWidget(QLabel("<b>AI Explain Prompt:</b>"))
+        self.explain_prompt_input = QTextEdit(self.config.get("explain_prompt", ""))
+        layout.addWidget(self.explain_prompt_input)
+        
+        btn_layout = QHBoxLayout()
+        
+        github_btn = QPushButton("View on GitHub")
+        github_btn.clicked.connect(lambda: webbrowser.open(GITHUB_URL))
+        
+        coffee_btn = QPushButton("☕ Buy me a coffee")
+        coffee_btn.setStyleSheet("background-color: #FFDD00; color: #000000; font-weight: bold;")
+        coffee_btn.clicked.connect(lambda: webbrowser.open(BUY_ME_COFFEE_URL))
+        
+        save_btn = QPushButton("Save")
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(self.save_and_close)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        
+        btn_layout.addWidget(github_btn)
+        btn_layout.addWidget(coffee_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(save_btn)
+        
+        layout.addLayout(btn_layout)
+
+    def save_and_close(self):
+        self.config["gemini_api_key"] = self.api_key_input.text().strip()
+        self.config["gemini_model"] = self.model_input.text().strip()
+        self.config["thinking_level"] = self.thinking_combo.currentText()
+        self.config["ai_prompt"] = self.ai_prompt_input.toPlainText()
+        self.config["explain_prompt"] = self.explain_prompt_input.toPlainText()
+        
+        save_config(self.config)
+        tooltip("Configuration saved successfully.")
+        self.accept()
+
+
+class FirstRunWizard(QDialog):
+    def __init__(self, parent=mw):
+        super().__init__(parent)
+        self.setWindowTitle("Welcome to PDFLinker!")
+        self.resize(650, 500)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.tabs = QTabWidget()
+        
+        # Tab 1: Tutorial
+        self.tutorial_tab = QWidget()
+        tut_layout = QVBoxLayout(self.tutorial_tab)
+        
+        tutorial_text = """
+        <h2>Welcome to PDFLinker! 🚀</h2>
+        <p>PDFLinker is a powerful Anki add-on that bridges the gap between your study materials and your flashcards.</p>
+        
+        <h3>⚙️ Crucial Setup Step:</h3>
+        <p>For the auto-sync to work properly, ensure your Anki Note Type has the following exactly named fields:</p>
+        <ul>
+            <li><b>PDF_Path</b></li>
+            <li><b>PDF_Page</b></li>
+        </ul>
+        <p><i>When adding cards, click the <b>Pin (Lock) icon</b> next to both the PDF_Path and PDF_Page fields in your 'Add' window.</i></p>
+        
+        <h3>💡 Pro-Tips for Flashcard Previews:</h3>
+        <ul>
+            <li><b>Un-cloze entirely:</b> Double-click on the <code>{{c1::</code> prefix.</li>
+            <li><b>Delete just the hint:</b> Double-click on the <code>::hint</code> portion.</li>
+        </ul>
+        <p>You can review this anytime in the <b>README</b> on our GitHub page.</p>
+        """
+        browser = QTextBrowser()
+        browser.setHtml(tutorial_text)
+        tut_layout.addWidget(browser)
+        self.tabs.addTab(self.tutorial_tab, "📚 Tutorial")
+        
+        # Tab 2: API Key Setup
+        self.api_tab = QWidget()
+        api_layout = QVBoxLayout(self.api_tab)
+        
+        api_info = """
+        <h3>🔑 Connect to Google Gemini AI</h3>
+        <p>To use the AI generation features, you need a free Google Gemini API key.</p>
+        <ol>
+            <li>Get a free API key from <a href="https://aistudio.google.com/">Google AI Studio</a>.</li>
+            <li>Paste it in the box below.</li>
+        </ol>
+        """
+        api_browser = QTextBrowser()
+        api_browser.setHtml(api_info)
+        api_browser.setOpenExternalLinks(True)
+        api_browser.setMaximumHeight(150)
+        api_layout.addWidget(api_browser)
+        
+        self.api_input = QLineEdit()
+        self.api_input.setPlaceholderText("Paste your Gemini API Key here...")
+        self.api_input.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit if hasattr(QLineEdit, 'EchoMode') else QLineEdit.PasswordEchoOnEdit)
+        api_layout.addWidget(self.api_input)
+        api_layout.addStretch()
+        
+        self.tabs.addTab(self.api_tab, "⚙️ API Setup")
+        
+        layout.addWidget(self.tabs)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        self.finish_btn = QPushButton("Save and Finish")
+        self.finish_btn.clicked.connect(self.finish_setup)
+        btn_layout.addWidget(self.finish_btn)
+        
+        layout.addLayout(btn_layout)
+
+    def finish_setup(self):
+        api_key = self.api_input.text().strip()
+        conf = get_config()
+        if api_key:
+            conf["gemini_api_key"] = api_key
+            save_config(conf)
+            tooltip("API Key saved!")
+        mark_first_run_complete()
+        self.accept()
+
+def check_first_run():
+    if is_first_run():
+        wizard = FirstRunWizard(mw)
+        wizard.exec()
 
 # ==========================================
 # MAIN VIEWER LOGIC
@@ -497,8 +793,6 @@ class ExplanationWindow(QMainWindow):
 
 review_viewer = None
 creator_viewer = None
-review_action = None
-creator_action = None
 
 class PDFViewerWindow(QMainWindow):
     def __init__(self, mode: str = "review", parent=None):
@@ -507,11 +801,10 @@ class PDFViewerWindow(QMainWindow):
         self.current_pdf_path = None 
         self.web_view = QWebEngineView(self)
         
-        # Link the custom page and pass 'self' so it knows which window is calling it
         self.web_page = CustomWebPage(self, self.web_view)
         self.web_view.setPage(self.web_page)
         
-        # --- TOOLBAR SETUP (FOR BOTH MODES) ---
+        # --- TOOLBAR SETUP ---
         toolbar = QToolBar("PDF Toolbar", self)
         toolbar.setMovable(False)
         toolbar.toggleViewAction().setEnabled(False)
@@ -532,7 +825,6 @@ class PDFViewerWindow(QMainWindow):
             self.setWindowTitle("PDFLinker Reader (Review Mode)")
             self.resize(800, 1000)
 
-        # These buttons appear in BOTH modes
         explain_action = QAction("🧠 Explain", self)
         explain_action.triggered.connect(self.explain_current_page)
         toolbar.addAction(explain_action)
@@ -543,7 +835,6 @@ class PDFViewerWindow(QMainWindow):
         support_action.triggered.connect(self.open_support_link)
         toolbar.addAction(support_action)
         
-        # --- WEB ENGINE SETTINGS ---
         self.setCentralWidget(self.web_view)
         self.web_view.loadFinished.connect(self.on_load_finished)
         
@@ -556,7 +847,6 @@ class PDFViewerWindow(QMainWindow):
         self._load_empty_viewer()
 
     def open_support_link(self) -> None:
-        """Shows a psychologically optimized message before opening the link."""
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Support PDFLinker")
         
@@ -569,21 +859,15 @@ class PDFViewerWindow(QMainWindow):
         )
         msg_box.setText(pitch_text)
         
-        # Create custom buttons
         support_btn = QPushButton("☕ Sure, I'll buy you a coffee!")
         cancel_btn = QPushButton("Maybe later")
         
-        # Add them to the message box
         msg_box.addButton(support_btn, QMessageBox.ButtonRole.AcceptRole)
         msg_box.addButton(cancel_btn, QMessageBox.ButtonRole.RejectRole)
         
-        # Show the window and wait for the user to click
         msg_box.exec()
-        
-        # If they clicked the support button, open the browser
         if msg_box.clickedButton() == support_btn:
-            import webbrowser
-            webbrowser.open("https://www.buymeacoffee.com/filippocristallo")
+            webbrowser.open(BUY_ME_COFFEE_URL)
 
     def _load_empty_viewer(self) -> None:
         if os.path.exists(VIEWER_HTML_PATH):
@@ -637,126 +921,53 @@ class PDFViewerWindow(QMainWindow):
         full_url = f"{base_viewer_url}?file={encoded_file_url}#page={page}"
         self.web_view.setUrl(QUrl(full_url))
 
-    def _get_api_config(self) -> Optional[Dict[str, Any]]:
-        config = mw.addonManager.getConfig(__name__) or {}
-        if not config.get("gemini_api_key", ""):
-            showInfo("Please set your 'gemini_api_key' in the add-on config.")
-            return None
-        return config
-
     def analyze_current_page(self) -> None:
-        if not self._get_api_config(): return
         js_extract = "(function() { console.log('PDF_EXTRACT_FLASHCARD:' + window.getSelection().toString().trim()); })();"
         self.web_view.page().runJavaScript(js_extract)
 
     def explain_current_page(self) -> None:
-        if not self._get_api_config(): return
         js_extract = "(function() { console.log('PDF_EXTRACT_EXPLAIN:' + window.getSelection().toString().trim()); })();"
         self.web_view.page().runJavaScript(js_extract)
 
     def process_extracted_text(self, extracted_text: str, task: str = "flashcard") -> None:
-        config = self._get_api_config()
-        if config:
-            self._call_ai_api(extracted_text, config, config.get("gemini_api_key", ""), task)
-
-    def regenerate_all_cards(self, extracted_text: str) -> None:
-        config = self._get_api_config()
-        if config:
-            self._call_ai_api(extracted_text, config, config.get("gemini_api_key", ""), task="flashcard")
-
-    def _call_ai_api(self, extracted_text: str, config: Dict[str, Any], api_key: str, task: str = "flashcard") -> None:
-        if not extracted_text or not str(extracted_text).strip():
-            showInfo("No text selected! Please highlight the text you want to analyze in the PDF first.")
-            return
-            
-        model_name = config.get("gemini_model")
-        thinking_level = config.get("thinking_level", "")
-        
         if task == "flashcard":
-            prompt_template = config.get("ai_prompt")
-            mime_type = "application/json"
+            call_gemini_api(extracted_text, task, self, self.on_cards_generated)
+        elif task == "explain":
+            call_gemini_api(extracted_text, task, self, self.on_explanation_generated)
+
+    def on_cards_generated(self, result_data, extracted_text):
+        if hasattr(self, 'generated_cards_window') and self.generated_cards_window.isVisible():
+            self.generated_cards_window.cards_data = result_data
+            self.generated_cards_window.extracted_text = extracted_text
+            self.generated_cards_window.populate_list()
+            tooltip("Flashcards Updated!", period=2000)
         else:
-            prompt_template = config.get("explain_prompt", "Explain this text simply and clearly.")
-            mime_type = "text/plain"
+            self.generated_cards_window = GeneratedCardsWindow(
+                regenerate_callback=lambda txt: call_gemini_api(txt, "flashcard", self, self.on_cards_generated),
+                cards_data=result_data,
+                extracted_text=extracted_text,
+                parent=self
+            )
+            self.generated_cards_window.show()
 
-        if not model_name or not prompt_template:
-            showInfo("Please set 'gemini_model' and the respective prompt in your Anki add-on config.")
-            return
-            
-        tooltip("Calling AI... Please wait.", period=4000)
-        
-        # Clean the prompt template
-        system_prompt = prompt_template.replace("{extracted_text}", "").strip()
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-        
-        data = {
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"parts": [{"text": extracted_text}]}],
-            "generationConfig": {"response_mime_type": mime_type}
-        }
-        
-        if thinking_level:
-            data["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
-        
-        def fetch_from_api():
-            req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), method='POST')
-            req.add_header('Content-Type', 'application/json')
-            with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                
-                parts = result['candidates'][0]['content']['parts']
-                content_text = "".join(part.get("text", "") for part in parts if not part.get("thought", False))
-                        
-                if task == "flashcard":
-                    cards_data = json.loads(content_text)
-                    for card in cards_data:
-                        if 'text' in card: card['text'] = clean_ai_text(card['text'])
-                        if 'extra' in card: card['extra'] = clean_ai_text(card['extra'])
-                    return cards_data
-                return content_text
-
-        def on_api_done(future):
-            try:
-                result_data = future.result()
-                if task == "flashcard":
-                    if hasattr(self, 'generated_cards_window') and self.generated_cards_window.isVisible():
-                        self.generated_cards_window.cards_data = result_data
-                        self.generated_cards_window.extracted_text = extracted_text
-                        self.generated_cards_window.populate_list()
-                        tooltip("Flashcards Updated!", period=2000)
-                    else:
-                        self.generated_cards_window = GeneratedCardsWindow(self, result_data, extracted_text)
-                        self.generated_cards_window.show()
-                elif task == "explain":
-                    if hasattr(self, 'explanation_window') and self.explanation_window.isVisible():
-                        self.explanation_window.update_explanation(result_data, extracted_text)
-                        tooltip("Explanation Updated!", period=2000)
-                    else:
-                        self.explanation_window = ExplanationWindow(self, result_data, extracted_text)
-                        self.explanation_window.show()
-            except urllib.error.HTTPError as e:
-                error_msg = f"HTTP Error calling AI API: {e.code} - {e.reason}"
-                if e.code == 404:
-                    error_msg = f"Error 404: Model not found. Check if '{model_name}' is correct in config."
-                elif e.code == 400:
-                    error_msg = f"Error 400 (Bad Request): The model '{model_name}' might not support the requested configuration (e.g., thinking_level)."
-                logger.error(error_msg)
-                showInfo(error_msg)
-            except Exception as e:
-                logger.exception("AI API Call Failed")
-                msg = f"Error parsing AI response: {str(e)}\n\nThe AI might not have returned valid JSON." if task == "flashcard" else f"Error returning AI explanation: {str(e)}"
-                showInfo(msg)
-
-        mw.taskman.run_in_background(fetch_from_api, on_api_done)
+    def on_explanation_generated(self, result_data, extracted_text):
+        if hasattr(self, 'explanation_window') and self.explanation_window.isVisible():
+            self.explanation_window.update_explanation(result_data, extracted_text)
+            tooltip("Explanation Updated!", period=2000)
+        else:
+            self.explanation_window = ExplanationWindow(
+                main_viewer_callback=self.process_extracted_text,
+                explanation_text=result_data,
+                extracted_text=extracted_text,
+                parent=self
+            )
+            self.explanation_window.show()
 
     def closeEvent(self, event) -> None:
         global review_viewer, creator_viewer
         if self.mode == "review":
-            if review_action: review_action.setChecked(False)
             review_viewer = None
         elif self.mode == "create":
-            if creator_action: creator_action.setChecked(False)
             creator_viewer = None
             
         if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
@@ -769,28 +980,39 @@ class PDFViewerWindow(QMainWindow):
         event.accept()
 
 # ==========================================
-# TOGGLE & MENU REGISTRATION
+# WINDOW LAUNCHERS & TOOLBAR REGISTRATION
 # ==========================================
 
-def toggle_review_viewer(checked: bool) -> None:
+def launch_review_viewer() -> None:
     global review_viewer
-    if checked:
-        if not review_viewer:
-            review_viewer = PDFViewerWindow(mode="review", parent=mw)
-        review_viewer.show()
-        if mw.state == "review" and getattr(mw.reviewer, 'state', None) == "answer":
-            update_pdf_for_current_card(mw.reviewer.card)
-    else:
-        if review_viewer: review_viewer.hide()
+    if not review_viewer:
+        review_viewer = PDFViewerWindow(mode="review", parent=mw)
+    review_viewer.show()
+    review_viewer.raise_()
+    review_viewer.activateWindow()
+    if mw.state == "review" and getattr(mw.reviewer, 'state', None) == "answer":
+        update_pdf_for_current_card(mw.reviewer.card)
 
-def toggle_creator_viewer(checked: bool) -> None:
+def launch_creator_viewer() -> None:
     global creator_viewer
-    if checked:
-        if not creator_viewer:
-            creator_viewer = PDFViewerWindow(mode="create", parent=mw)
-        creator_viewer.show()
-    else:
-        if creator_viewer: creator_viewer.hide()
+    if not creator_viewer:
+        creator_viewer = PDFViewerWindow(mode="create", parent=mw)
+    creator_viewer.show()
+    creator_viewer.raise_()
+    creator_viewer.activateWindow()
+
+text_to_flashcard_viewer = None
+def launch_text_to_flashcard() -> None:
+    global text_to_flashcard_viewer
+    if not text_to_flashcard_viewer:
+        text_to_flashcard_viewer = TextToFlashcardWindow(parent=mw)
+    text_to_flashcard_viewer.show()
+    text_to_flashcard_viewer.raise_()
+    text_to_flashcard_viewer.activateWindow()
+
+def open_config_dialog():
+    dialog = ConfigDialog(mw)
+    dialog.exec()
 
 def update_pdf_for_current_card(card: Optional[Card]) -> None:
     global review_viewer
@@ -804,20 +1026,35 @@ def update_pdf_for_current_card(card: Optional[Card]) -> None:
         if path and page and os.path.exists(path):
             review_viewer.load_pdf(path, page, note)
 
-def setup_menu() -> None:
-    global review_action, creator_action
+def setup_gui():
+    # 1. Custom Configure Action override
+    mw.addonManager.setConfigAction(__name__, open_config_dialog)
     
-    mw.form.menuTools.addSeparator()
+    # 2. Main Window Native Qt Toolbar Integration
+    pdflinker_toolbar = QToolBar("PDFLinker", mw)
+    pdflinker_toolbar.setObjectName("pdflinker_toolbar")
     
-    review_action = QAction("PDFLinker: Review Mode", mw)
-    review_action.setCheckable(True)
-    review_action.triggered.connect(toggle_review_viewer)
-    mw.form.menuTools.addAction(review_action)
+    label = QLabel(" <b>PDFLinker:</b> ")
+    pdflinker_toolbar.addWidget(label)
+
+    create_action = QAction("📝 PDF Creator", mw)
+    create_action.triggered.connect(launch_creator_viewer)
+    pdflinker_toolbar.addAction(create_action)
+
+    review_action = QAction("📖 PDF Review", mw)
+    review_action.triggered.connect(launch_review_viewer)
+    pdflinker_toolbar.addAction(review_action)
     
-    creator_action = QAction("PDFLinker: Creator Mode", mw)
-    creator_action.setCheckable(True)
-    creator_action.triggered.connect(toggle_creator_viewer)
-    mw.form.menuTools.addAction(creator_action)
+    text_action = QAction("⚡ Text ➔ Flashcards", mw)
+    text_action.triggered.connect(launch_text_to_flashcard)
+    pdflinker_toolbar.addAction(text_action)
+
+    config_action = QAction("⚙️ Config", mw)
+    config_action.triggered.connect(open_config_dialog)
+    pdflinker_toolbar.addAction(config_action)
+
+    mw.addToolBar(pdflinker_toolbar)
 
 gui_hooks.reviewer_did_show_answer.append(update_pdf_for_current_card)
-setup_menu()
+gui_hooks.profile_did_open.append(check_first_run)
+gui_hooks.main_window_did_init.append(setup_gui)

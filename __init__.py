@@ -781,9 +781,9 @@ class FirstRunWizard(QDialog):
         
         api_info = """
         <h3>🔑 Connect to Google Gemini AI</h3>
-        <p>To use the AI generation features, you need a free Google Gemini API key.</p>
+        <p>To use the AI generation features, you need a Google Gemini API key.</p>
         <ol>
-            <li>Get a free API key from <a href="https://aistudio.google.com/">Google AI Studio</a>.</li>
+            <li>Get an API key from <a href="https://aistudio.google.com/">Google AI Studio</a>.</li>
             <li>Paste it in the box below.</li>
         </ol>
         """
@@ -1068,13 +1068,19 @@ def setup_gui():
     review_action.triggered.connect(launch_review_viewer)
     pdflinker_toolbar.addAction(review_action)
     
+    pdflinker_toolbar.addSeparator()
+    
     text_action = QAction("⚡ Text ➔ Flashcards", mw)
     text_action.triggered.connect(launch_text_to_flashcard)
     pdflinker_toolbar.addAction(text_action)
 
+    pdflinker_toolbar.addSeparator()
+
     config_action = QAction("⚙️ Config", mw)
     config_action.triggered.connect(open_config_dialog)
     pdflinker_toolbar.addAction(config_action)
+
+    pdflinker_toolbar.addSeparator()
 
     support_action = QAction("☕ Buy me a coffee", mw)
     support_action.triggered.connect(lambda: show_support_prompt(mw))

@@ -1060,11 +1060,11 @@ def setup_gui():
     label = QLabel(" <b>PDFLinker:</b> ")
     pdflinker_toolbar.addWidget(label)
 
-    create_action = QAction("📝 PDF Creator", mw)
+    create_action = QAction("📝 Creator Mode", mw)
     create_action.triggered.connect(launch_creator_viewer)
     pdflinker_toolbar.addAction(create_action)
 
-    review_action = QAction("📖 PDF Review", mw)
+    review_action = QAction("📖 Review Mode", mw)
     review_action.triggered.connect(launch_review_viewer)
     pdflinker_toolbar.addAction(review_action)
     
@@ -1076,7 +1076,7 @@ def setup_gui():
     config_action.triggered.connect(open_config_dialog)
     pdflinker_toolbar.addAction(config_action)
 
-    support_action = QAction("☕ Support", mw)
+    support_action = QAction("☕ Buy me a coffee", mw)
     support_action.triggered.connect(lambda: show_support_prompt(mw))
     pdflinker_toolbar.addAction(support_action)
 

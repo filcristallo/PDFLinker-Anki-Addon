@@ -315,6 +315,35 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
 
 
 # ==========================================
+# SUPPORT PROMPT
+# ==========================================
+
+def show_support_prompt(parent=None):
+    """Shows the support message box and opens the link if accepted."""
+    msg_box = QMessageBox(parent)
+    msg_box.setWindowTitle("Support PDFLinker")
+    
+    pitch_text = (
+        "<h3>PDFLinker will always be 100% free and open source.</h3>"
+        "<p>I built this tool to help us win back hundreds of hours of tedious flashcard creation.</p>"
+        "<p>If PDFLinker has helped you save time, ace an exam, or just made your life a little easier, "
+        "and <b>you are in a position to do so</b>—consider buying me a coffee!</p>"
+        "<p>It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.</p>"
+    )
+    msg_box.setText(pitch_text)
+    
+    support_btn = QPushButton("☕ Sure, I'll buy you a coffee!")
+    cancel_btn = QPushButton("Maybe later")
+    
+    msg_box.addButton(support_btn, QMessageBox.ButtonRole.AcceptRole)
+    msg_box.addButton(cancel_btn, QMessageBox.ButtonRole.RejectRole)
+    
+    msg_box.exec()
+    if msg_box.clickedButton() == support_btn:
+        import webbrowser
+        webbrowser.open(BUY_ME_COFFEE_URL)
+
+# ==========================================
 # UI COMPONENTS
 # ==========================================
 
@@ -603,6 +632,9 @@ class TextToFlashcardWindow(QMainWindow):
         call_gemini_api(text, "flashcard", self, self.on_cards_generated)
 
     def on_cards_generated(self, result_data, extracted_text):
+        # 1. Clear the text box once the generation is successful
+        self.text_edit.clear()
+        
         if hasattr(self, 'generated_cards_window') and self.generated_cards_window.isVisible():
             self.generated_cards_window.cards_data = result_data
             self.generated_cards_window.extracted_text = extracted_text
@@ -616,6 +648,15 @@ class TextToFlashcardWindow(QMainWindow):
                 parent=self
             )
             self.generated_cards_window.show()
+
+    def closeEvent(self, event):
+        # 2. Clear the text box if the user closes the window
+        self.text_edit.clear()
+        
+        if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
+            self.generated_cards_window.close()
+            
+        event.accept()
 
 # ==========================================
 # CONFIG & FIRST-RUN GUIs
@@ -832,7 +873,7 @@ class PDFViewerWindow(QMainWindow):
         toolbar.addSeparator()
         
         support_action = QAction("☕ Buy me a coffee", self)
-        support_action.triggered.connect(self.open_support_link)
+        support_action.triggered.connect(lambda: show_support_prompt(self))
         toolbar.addAction(support_action)
         
         self.setCentralWidget(self.web_view)
@@ -845,29 +886,6 @@ class PDFViewerWindow(QMainWindow):
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
 
         self._load_empty_viewer()
-
-    def open_support_link(self) -> None:
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Support PDFLinker")
-        
-        pitch_text = (
-            "<h3>PDFLinker will always be 100% free and open source.</h3>"
-            "<p>I built this tool to help us win back hundreds of hours of tedious flashcard creation.</p>"
-            "<p>If PDFLinker has helped you save time, ace an exam, or just made your life a little easier, "
-            "and <b>you are in a position to do so</b>—consider buying me a coffee!</p>"
-            "<p>It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.</p>"
-        )
-        msg_box.setText(pitch_text)
-        
-        support_btn = QPushButton("☕ Sure, I'll buy you a coffee!")
-        cancel_btn = QPushButton("Maybe later")
-        
-        msg_box.addButton(support_btn, QMessageBox.ButtonRole.AcceptRole)
-        msg_box.addButton(cancel_btn, QMessageBox.ButtonRole.RejectRole)
-        
-        msg_box.exec()
-        if msg_box.clickedButton() == support_btn:
-            webbrowser.open(BUY_ME_COFFEE_URL)
 
     def _load_empty_viewer(self) -> None:
         if os.path.exists(VIEWER_HTML_PATH):
@@ -1034,6 +1052,7 @@ def setup_gui():
     pdflinker_toolbar = QToolBar("PDFLinker", mw)
     pdflinker_toolbar.setObjectName("pdflinker_toolbar")
     
+    # Lock the toolbar
     pdflinker_toolbar.setMovable(False)
     pdflinker_toolbar.setFloatable(False)
     pdflinker_toolbar.toggleViewAction().setEnabled(False)
@@ -1041,11 +1060,11 @@ def setup_gui():
     label = QLabel(" <b>PDFLinker:</b> ")
     pdflinker_toolbar.addWidget(label)
 
-    create_action = QAction("📝 Creator Mode", mw)
+    create_action = QAction("📝 PDF Creator", mw)
     create_action.triggered.connect(launch_creator_viewer)
     pdflinker_toolbar.addAction(create_action)
 
-    review_action = QAction("📖 Review Mode", mw)
+    review_action = QAction("📖 PDF Review", mw)
     review_action.triggered.connect(launch_review_viewer)
     pdflinker_toolbar.addAction(review_action)
     
@@ -1056,6 +1075,10 @@ def setup_gui():
     config_action = QAction("⚙️ Config", mw)
     config_action.triggered.connect(open_config_dialog)
     pdflinker_toolbar.addAction(config_action)
+
+    support_action = QAction("☕ Support", mw)
+    support_action.triggered.connect(lambda: show_support_prompt(mw))
+    pdflinker_toolbar.addAction(support_action)
 
     mw.addToolBar(pdflinker_toolbar)
 

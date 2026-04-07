@@ -1034,14 +1034,18 @@ def setup_gui():
     pdflinker_toolbar = QToolBar("PDFLinker", mw)
     pdflinker_toolbar.setObjectName("pdflinker_toolbar")
     
+    pdflinker_toolbar.setMovable(False)
+    pdflinker_toolbar.setFloatable(False)
+    pdflinker_toolbar.toggleViewAction().setEnabled(False)
+    
     label = QLabel(" <b>PDFLinker:</b> ")
     pdflinker_toolbar.addWidget(label)
 
-    create_action = QAction("📝 PDF Creator", mw)
+    create_action = QAction("📝 Creator Mode", mw)
     create_action.triggered.connect(launch_creator_viewer)
     pdflinker_toolbar.addAction(create_action)
 
-    review_action = QAction("📖 PDF Review", mw)
+    review_action = QAction("📖 Review Mode", mw)
     review_action.triggered.connect(launch_review_viewer)
     pdflinker_toolbar.addAction(review_action)
     

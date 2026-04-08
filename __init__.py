@@ -417,6 +417,34 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
 # ENGAGEMENT & SUPPORT PROMPTS
 # ==========================================
 
+class SupportDialog(QDialog):
+    """A scrollable dialog for support prompts, ensuring large donator lists do not break the UI."""
+    def __init__(self, title: str, html_text: str, accept_btn_text: str, reject_btn_text: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.resize(500, 450)
+        
+        layout = QVBoxLayout(self)
+        
+        self.text_browser = QTextBrowser()
+        self.text_browser.setOpenExternalLinks(True)
+        self.text_browser.setHtml(html_text)
+        layout.addWidget(self.text_browser)
+        
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        self.reject_btn = QPushButton(reject_btn_text)
+        self.reject_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(self.reject_btn)
+        
+        self.accept_btn = QPushButton(accept_btn_text)
+        self.accept_btn.setStyleSheet("background-color: #FFDD00; color: #000000; font-weight: bold;")
+        self.accept_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(self.accept_btn)
+        
+        layout.addLayout(btn_layout)
+
 def track_action() -> None:
     """Tracks user actions and triggers rate/donate prompts at specific milestones."""
     conf = get_config()
@@ -451,29 +479,26 @@ def track_action() -> None:
             conf["rate_target"] = actions + 20
             
     elif show_coffee:
-        msg = QMessageBox(mw)
-        msg.setWindowTitle("Support PDFLinker")
-        
         donators = get_donators_list()
         donators_html = ""
         if donators:
             donators_html = "<hr><h4>💖 Huge thanks to our supporters:</h4><p><b>" + ", ".join(donators) + "</b></p>"
         
-        msg.setText("<h3>You've saved hours of work! ⏳</h3>"
-                    "<p>PDFLinker has now helped you process over 50 items. Think about how much manual flashcard creation time that has saved you!</p>"
-                    "<p>I build and maintain this tool entirely in my free time, giving it away for free to help students like you study smarter.</p>"
-                    "<p>If PDFLinker gives you an edge in your studies, <b>please consider buying me a coffee</b>. It directly fuels the late-night coding sessions required to keep this add-on alive, updated, and free. 🙏</p>"
-                    + donators_html)
+        pitch_text = ("<h3>You've saved hours of work! ⏳</h3>"
+                      "<p>PDFLinker has now helped you process over 50 items. Think about how much manual flashcard creation time that has saved you!</p>"
+                      "<p>I build and maintain this tool entirely in my free time, giving it away for free to help students like you study smarter.</p>"
+                      "<p>If PDFLinker gives you an edge in your studies, <b>please consider buying me a coffee</b>. It directly fuels the late-night coding sessions required to keep this add-on alive, updated, and free. 🙏</p>"
+                      + donators_html)
         
-        coffee_btn = QPushButton("☕ Buy me a coffee (Done)")
-        later_btn = QPushButton("Maybe Later")
+        dialog = SupportDialog(
+            title="Support PDFLinker",
+            html_text=pitch_text,
+            accept_btn_text="☕ Buy me a coffee (Done)",
+            reject_btn_text="Maybe Later",
+            parent=mw
+        )
         
-        msg.addButton(coffee_btn, QMessageBox.ButtonRole.AcceptRole)
-        msg.addButton(later_btn, QMessageBox.ButtonRole.RejectRole)
-        
-        msg.exec()
-        
-        if msg.clickedButton() == coffee_btn:
+        if dialog.exec():
             conf["coffee_target"] = -1
             webbrowser.open(BUY_ME_COFFEE_URL)
         else:
@@ -483,9 +508,6 @@ def track_action() -> None:
 
 def show_support_prompt(parent=None):
     """Shows the support message box and opens the link if accepted."""
-    msg_box = QMessageBox(parent)
-    msg_box.setWindowTitle("Support PDFLinker")
-    
     donators = get_donators_list()
     donators_html = ""
     if donators:
@@ -499,16 +521,16 @@ def show_support_prompt(parent=None):
         "<p>It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.</p>"
         + donators_html
     )
-    msg_box.setText(pitch_text)
     
-    support_btn = QPushButton("☕ Sure, I'll buy you a coffee!")
-    cancel_btn = QPushButton("Maybe later")
+    dialog = SupportDialog(
+        title="Support PDFLinker",
+        html_text=pitch_text,
+        accept_btn_text="☕ Sure, I'll buy you a coffee!",
+        reject_btn_text="Maybe later",
+        parent=parent
+    )
     
-    msg_box.addButton(support_btn, QMessageBox.ButtonRole.AcceptRole)
-    msg_box.addButton(cancel_btn, QMessageBox.ButtonRole.RejectRole)
-    
-    msg_box.exec()
-    if msg_box.clickedButton() == support_btn:
+    if dialog.exec():
         import webbrowser
         webbrowser.open(BUY_ME_COFFEE_URL)
 

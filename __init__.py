@@ -959,7 +959,10 @@ class PDFViewerWindow(QMainWindow):
         self.web_view.loadFinished.connect(self.on_load_finished)
         
         settings = self.web_view.settings()
-        settings.setAttribute(QWebEngineSettings.WebAttribute.ForceDarkMode, False)
+        try:
+            settings.setAttribute(QWebEngineSettings.WebAttribute.ForceDarkMode, False)
+        except AttributeError:
+            pass  # ForceDarkMode may not be available in older Anki/Qt versions
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)

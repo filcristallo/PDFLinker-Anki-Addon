@@ -40,6 +40,8 @@ PDFJS_RELEASE_URL = "https://github.com/mozilla/pdf.js/releases/download/v3.11.1
 GITHUB_URL = "https://github.com/filcristallo/PDFLinker-Anki-Addon"
 BUY_ME_COFFEE_URL = "https://www.buymeacoffee.com/filippocristallo"
 
+DONATORS_LIST = ["Sava"]
+
 # Setup basic logging for the add-on
 logging.basicConfig(level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("PDFLinker")
@@ -412,7 +414,7 @@ def track_action() -> None:
     actions = conf.get("action_count", 0) + 1
     conf["action_count"] = actions
     
-    rate_target = conf.get("rate_target", 25)
+    rate_target = conf.get("rate_target", 20)
     coffee_target = conf.get("coffee_target", 50)
     
     show_rate = (rate_target != -1 and actions >= rate_target)
@@ -437,15 +439,19 @@ def track_action() -> None:
             conf["rate_target"] = -1
             webbrowser.open("https://ankiweb.net/shared/info/962234340?cb=1775683908751")
         else:
-            conf["rate_target"] = actions + 25
+            conf["rate_target"] = actions + 20
             
     elif show_coffee:
         msg = QMessageBox(mw)
         msg.setWindowTitle("Support PDFLinker")
+        
+        donators_html = "<h4>💖 Huge thanks to our supporters:</h4><ul>" + "".join(f"<li><b>{name}</b></li>" for name in DONATORS_LIST) + "</ul>"
+        
         msg.setText("<h3>You've saved hours of work! ⏳</h3>"
                     "<p>PDFLinker has now helped you process over 50 items. Think about how much manual flashcard creation time that has saved you!</p>"
                     "<p>I build and maintain this tool entirely in my free time, giving it away for free to help students like you study smarter.</p>"
-                    "<p>If PDFLinker gives you an edge in your studies, <b>please consider buying me a coffee</b>. It directly fuels the late-night coding sessions required to keep this add-on alive, updated, and free. 🙏</p>")
+                    "<p>If PDFLinker gives you an edge in your studies, <b>please consider buying me a coffee</b>. It directly fuels the late-night coding sessions required to keep this add-on alive, updated, and free. 🙏</p>"
+                    "<hr>" + donators_html)
         
         coffee_btn = QPushButton("☕ Buy me a coffee (Done)")
         later_btn = QPushButton("Maybe Later")
@@ -468,12 +474,15 @@ def show_support_prompt(parent=None):
     msg_box = QMessageBox(parent)
     msg_box.setWindowTitle("Support PDFLinker")
     
+    donators_html = "<h4>💖 Huge thanks to our supporters:</h4><ul>" + "".join(f"<li><b>{name}</b></li>" for name in DONATORS_LIST) + "</ul>"
+    
     pitch_text = (
         "<h3>PDFLinker will always be 100% free and open source.</h3>"
         "<p>I built this tool to help us win back hundreds of hours of tedious flashcard creation.</p>"
         "<p>If PDFLinker has helped you save time, ace an exam, or just made your life a little easier, "
         "and <b>you are in a position to do so</b>—consider buying me a coffee!</p>"
         "<p>It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.</p>"
+        "<hr>" + donators_html
     )
     msg_box.setText(pitch_text)
     
@@ -576,12 +585,27 @@ class GeneratedCardsWindow(QMainWindow):
         
         self.control_layout = QHBoxLayout()
         self.control_layout.addStretch()
+        
+        self.info_btn = QPushButton("ℹ️ Pro Tips")
+        self.info_btn.clicked.connect(self.show_pro_tips)
+        self.control_layout.addWidget(self.info_btn)
+        
         self.regen_all_btn = QPushButton("Regenerate All")
         self.regen_all_btn.clicked.connect(self.on_regenerate_all)
         self.control_layout.addWidget(self.regen_all_btn)
         self.main_layout.addLayout(self.control_layout)
         
         self.populate_list()
+
+    def show_pro_tips(self) -> None:
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Pro Tips")
+        msg.setText("<h3>💡 Pro-Tips for editing flashcards:</h3>"
+                    "<ul>"
+                    "<li><b>Un-cloze entirely:</b> Double-click on the <code>{{c1::</code> prefix.</li>"
+                    "<li><b>Delete just the hint:</b> Double-click on the <code>::hint</code> portion.</li>"
+                    "</ul>")
+        msg.exec()
 
     def populate_list(self) -> None:
         self.cards_container = QWidget()
@@ -965,20 +989,24 @@ class ConfigDialog(QDialog):
         prompt_help_label.setStyleSheet("color: gray; margin-top: 10px; margin-bottom: 5px;")
         layout.addWidget(prompt_help_label)
         
-        layout.addWidget(QLabel("<b>AI Flashcard Prompt (Cloze):</b>"))
-        self.ai_prompt_input = QTextEdit(self.config.get("ai_prompt", ""))
-        self.ai_prompt_input.setToolTip("Instructions for generating fill-in-the-blank cards.")
-        layout.addWidget(self.ai_prompt_input)
-        
-        layout.addWidget(QLabel("<b>AI Basic Prompt (Front/Back):</b>"))
-        self.basic_prompt_input = QTextEdit(self.config.get("basic_prompt", ""))
-        self.basic_prompt_input.setToolTip("Instructions for generating standard Q&A cards.")
-        layout.addWidget(self.basic_prompt_input)
-        
-        layout.addWidget(QLabel("<b>AI Explain Prompt:</b>"))
-        self.explain_prompt_input = QTextEdit(self.config.get("explain_prompt", ""))
-        self.explain_prompt_input.setToolTip("Instructions for explaining difficult concepts.")
-        layout.addWidget(self.explain_prompt_input)
+        def create_prompt_section(title, tooltip_text, dict_key):
+            header_layout = QHBoxLayout()
+            header_layout.addWidget(QLabel(f"<b>{title}</b>"))
+            header_layout.addStretch()
+            reset_btn = QPushButton("Reset to Default")
+            header_layout.addWidget(reset_btn)
+            layout.addLayout(header_layout)
+            
+            text_edit = QTextEdit(self.config.get(dict_key, ""))
+            text_edit.setToolTip(tooltip_text)
+            layout.addWidget(text_edit)
+            
+            reset_btn.clicked.connect(lambda _, k=dict_key, te=text_edit: self.reset_prompt(k, te))
+            return text_edit
+
+        self.ai_prompt_input = create_prompt_section("AI Flashcard Prompt (Cloze):", "Instructions for generating fill-in-the-blank cards.", "ai_prompt")
+        self.basic_prompt_input = create_prompt_section("AI Basic Prompt (Front/Back):", "Instructions for generating standard Q&A cards.", "basic_prompt")
+        self.explain_prompt_input = create_prompt_section("AI Explain Prompt:", "Instructions for explaining difficult concepts.", "explain_prompt")
         
         btn_layout = QHBoxLayout()
         
@@ -1003,6 +1031,15 @@ class ConfigDialog(QDialog):
         btn_layout.addWidget(save_btn)
         
         layout.addLayout(btn_layout)
+
+    def reset_prompt(self, key: str, text_edit: QTextEdit):
+        try:
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                default_config = json.load(f)
+            if key in default_config:
+                text_edit.setPlainText(default_config[key])
+        except Exception as e:
+            tooltip(f"Failed to load default config: {e}")
 
     def save_and_close(self):
         self.config["gemini_api_key"] = self.api_key_input.text().strip()

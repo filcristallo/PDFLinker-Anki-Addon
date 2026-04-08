@@ -222,9 +222,13 @@ class CustomWebPage(QWebEnginePage):
                 auto_fill_open_editors(self.viewer.current_pdf_path, page_num)
                 set_last_page(self.viewer.current_pdf_path, page_num)
                 
-        elif message.startswith("PDF_EXTRACT_FLASHCARD:"):
-            text = message[len("PDF_EXTRACT_FLASHCARD:"):]
-            self.viewer.process_extracted_text(text, task="flashcard")
+        elif message.startswith("PDF_EXTRACT_FLASHCARD:") or message.startswith("PDF_EXTRACT_CLOZE:"):
+            text = message.split(":", 1)[1]
+            self.viewer.process_extracted_text(text, task="cloze")
+
+        elif message.startswith("PDF_EXTRACT_BASIC:"):
+            text = message.split(":", 1)[1]
+            self.viewer.process_extracted_text(text, task="basic")
 
         elif message.startswith("PDF_EXTRACT_EXPLAIN:"):
             text = message[len("PDF_EXTRACT_EXPLAIN:"):]
@@ -251,9 +255,13 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
     model_name = config.get("gemini_model", "gemini-3-flash-preview")
     thinking_level = config.get("thinking_level", "")
     
-    if task == "flashcard":
+    if task == "cloze" or task == "flashcard":
         prompt_template = config.get("ai_prompt", "")
         prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text with optimized cloze syntax.\n'extra': Supporting information, explanations, and context notes."
+        mime_type = "application/json"
+    elif task == "basic":
+        prompt_template = config.get("basic_prompt", "You are an expert Anki flashcard creator. Create Front/Back flashcards.")
+        prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text (Front of the card).\n'extra': The answer text (Back of the card) and any supporting explanations."
         mime_type = "application/json"
     else:
         prompt_template = config.get("explain_prompt", "Explain this text simply and clearly.")
@@ -294,7 +302,7 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
                 
             content_text = "".join(part.get("text", "") for part in parts if not part.get("thought", False))
                     
-            if task == "flashcard":
+            if task in ("cloze", "flashcard", "basic"):
                 # Clean up markdown formatting if the AI mistakenly outputs it instead of raw JSON
                 cleaned_text = content_text.strip()
                 if cleaned_text.startswith("```json"):
@@ -447,7 +455,7 @@ class ClozeTextEdit(QTextEdit):
 
 
 class GeneratedCardsWindow(QMainWindow):
-    def __init__(self, regenerate_callback: Callable, cards_data: List[Dict], extracted_text: str, parent=None):
+    def __init__(self, regenerate_callback: Callable, cards_data: List[Dict], extracted_text: str, task: str = "cloze", parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI Generated Flashcards")
         self.resize(750, 600)
@@ -455,6 +463,7 @@ class GeneratedCardsWindow(QMainWindow):
         self.regenerate_callback = regenerate_callback
         self.cards_data = cards_data
         self.extracted_text = extracted_text
+        self.task = task
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -501,13 +510,13 @@ class GeneratedCardsWindow(QMainWindow):
             text_str = card.get('text', '')
             extra_str = card.get('extra', '')
             
-            text_label = QLabel("<b>Text:</b>")
+            text_label = QLabel("<b>Text (Front):</b>") if self.task == "basic" else QLabel("<b>Text:</b>")
             text_edit = ClozeTextEdit()
             text_edit.setHtml(text_str)
             text_edit.setMinimumHeight(70)
             text_edit.setMaximumHeight(200)
             
-            extra_label = QLabel("<b>Extra:</b>")
+            extra_label = QLabel("<b>Extra (Back):</b>") if self.task == "basic" else QLabel("<b>Extra:</b>")
             extra_edit = QTextEdit()
             extra_edit.setHtml(extra_str)
             extra_edit.setMinimumHeight(70)
@@ -631,9 +640,13 @@ class ExplanationWindow(QMainWindow):
         
         self.control_layout = QHBoxLayout()
         self.control_layout.addStretch()
-        self.gen_cards_btn = QPushButton("Generate Flashcards from this Explanation")
-        self.gen_cards_btn.clicked.connect(self.generate_cards_from_explanation)
-        self.control_layout.addWidget(self.gen_cards_btn)
+        self.gen_cloze_btn = QPushButton("Generate Cloze from this Explanation")
+        self.gen_cloze_btn.clicked.connect(self.generate_cloze_from_explanation)
+        self.control_layout.addWidget(self.gen_cloze_btn)
+        
+        self.gen_basic_btn = QPushButton("Generate Basic from this Explanation")
+        self.gen_basic_btn.clicked.connect(self.generate_basic_from_explanation)
+        self.control_layout.addWidget(self.gen_basic_btn)
         self.main_layout.addLayout(self.control_layout)
         
         self.update_explanation(explanation_text, extracted_text)
@@ -643,9 +656,13 @@ class ExplanationWindow(QMainWindow):
         formatted_text = clean_ai_text(explanation_text)
         self.text_browser.setHtml(formatted_text)
 
-    def generate_cards_from_explanation(self) -> None:
+    def generate_cloze_from_explanation(self) -> None:
         if self.main_viewer_callback:
-            self.main_viewer_callback(self.raw_explanation_text, task="flashcard")
+            self.main_viewer_callback(self.raw_explanation_text, task="cloze")
+
+    def generate_basic_from_explanation(self) -> None:
+        if self.main_viewer_callback:
+            self.main_viewer_callback(self.raw_explanation_text, task="basic")
 
 
 class TextToExplainWindow(QMainWindow):
@@ -681,8 +698,8 @@ class TextToExplainWindow(QMainWindow):
             return
         call_gemini_api(text, "explain", self, self.on_explanation_generated)
 
-    def process_callback(self, extracted_text: str, task: str = "flashcard") -> None:
-        if task == "flashcard":
+    def process_callback(self, extracted_text: str, task: str = "cloze") -> None:
+        if task in ("cloze", "flashcard", "basic"):
             call_gemini_api(extracted_text, task, self, self.on_cards_generated)
         elif task == "explain":
             call_gemini_api(extracted_text, task, self, self.on_explanation_generated)
@@ -707,12 +724,15 @@ class TextToExplainWindow(QMainWindow):
             self.generated_cards_window.cards_data = result_data
             self.generated_cards_window.extracted_text = extracted_text
             self.generated_cards_window.populate_list()
-            tooltip("Flashcards Updated!", period=2000)
+            tooltip("Cards Updated!", period=2000)
         else:
+            # We assume cloze as default if it's not clear which task was used here, 
+            # though process_callback correctly routes to on_cards_generated. 
             self.generated_cards_window = GeneratedCardsWindow(
-                regenerate_callback=lambda txt: call_gemini_api(txt, "flashcard", self, self.on_cards_generated),
+                regenerate_callback=lambda txt: call_gemini_api(txt, "cloze", self, self.on_cards_generated),
                 cards_data=result_data,
                 extracted_text=extracted_text,
+                task="cloze",
                 parent=self
             )
             self.generated_cards_window.show()
@@ -726,18 +746,20 @@ class TextToExplainWindow(QMainWindow):
         event.accept()
 
 
-class TextToFlashcardWindow(QMainWindow):
+class TextToCardsWindow(QMainWindow):
     """Allows users to paste arbitrary text and generate cards."""
-    def __init__(self, parent=None):
+    def __init__(self, task: str = "cloze", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("PDFLinker - Text to Flashcards")
+        self.task = task
+        title_type = "Cloze" if task == "cloze" else "Basic"
+        self.setWindowTitle(f"PDFLinker - Text to {title_type}")
         self.resize(600, 400)
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
         
-        self.label = QLabel("<b>Paste text below to generate flashcards:</b>")
+        self.label = QLabel(f"<b>Paste text below to generate {title_type.lower()} flashcards:</b>")
         self.layout.addWidget(self.label)
         
         self.text_edit = QTextEdit()
@@ -746,7 +768,7 @@ class TextToFlashcardWindow(QMainWindow):
         self.btn_layout = QHBoxLayout()
         self.btn_layout.addStretch()
         
-        self.generate_btn = QPushButton("⚡ Generate Flashcards")
+        self.generate_btn = QPushButton(f"⚡ Generate {title_type}")
         self.generate_btn.clicked.connect(self.on_generate_clicked)
         self.btn_layout.addWidget(self.generate_btn)
         
@@ -757,7 +779,7 @@ class TextToFlashcardWindow(QMainWindow):
         if not text:
             showInfo("Please paste some text first.")
             return
-        call_gemini_api(text, "flashcard", self, self.on_cards_generated)
+        call_gemini_api(text, self.task, self, self.on_cards_generated)
 
     def on_cards_generated(self, result_data, extracted_text):
         # 1. Clear the text box once the generation is successful
@@ -766,13 +788,15 @@ class TextToFlashcardWindow(QMainWindow):
         if hasattr(self, 'generated_cards_window') and self.generated_cards_window.isVisible():
             self.generated_cards_window.cards_data = result_data
             self.generated_cards_window.extracted_text = extracted_text
+            self.generated_cards_window.task = self.task
             self.generated_cards_window.populate_list()
             tooltip("Flashcards Updated!", period=2000)
         else:
             self.generated_cards_window = GeneratedCardsWindow(
-                regenerate_callback=lambda txt: call_gemini_api(txt, "flashcard", self, self.on_cards_generated),
+                regenerate_callback=lambda txt: call_gemini_api(txt, self.task, self, self.on_cards_generated),
                 cards_data=result_data,
                 extracted_text=extracted_text,
+                task=self.task,
                 parent=self
             )
             self.generated_cards_window.show()
@@ -819,9 +843,13 @@ class ConfigDialog(QDialog):
         
         layout.addLayout(form_layout)
         
-        layout.addWidget(QLabel("<b>AI Flashcard Prompt:</b>"))
+        layout.addWidget(QLabel("<b>AI Flashcard Prompt (Cloze):</b>"))
         self.ai_prompt_input = QTextEdit(self.config.get("ai_prompt", ""))
         layout.addWidget(self.ai_prompt_input)
+        
+        layout.addWidget(QLabel("<b>AI Basic Prompt (Front/Back):</b>"))
+        self.basic_prompt_input = QTextEdit(self.config.get("basic_prompt", ""))
+        layout.addWidget(self.basic_prompt_input)
         
         layout.addWidget(QLabel("<b>AI Explain Prompt:</b>"))
         self.explain_prompt_input = QTextEdit(self.config.get("explain_prompt", ""))
@@ -856,6 +884,7 @@ class ConfigDialog(QDialog):
         self.config["gemini_model"] = self.model_input.text().strip()
         self.config["thinking_level"] = self.thinking_combo.currentText()
         self.config["ai_prompt"] = self.ai_prompt_input.toPlainText()
+        self.config["basic_prompt"] = self.basic_prompt_input.toPlainText()
         self.config["explain_prompt"] = self.explain_prompt_input.toPlainText()
         
         save_config(self.config)
@@ -987,9 +1016,13 @@ class PDFViewerWindow(QMainWindow):
             open_action.triggered.connect(self.open_local_pdf)
             toolbar.addAction(open_action)
             
-            analyze_action = QAction("⚡ Generate Flashcards", self)
-            analyze_action.triggered.connect(self.analyze_current_page)
+            analyze_action = QAction("⚡ Generate Cloze", self)
+            analyze_action.triggered.connect(self.analyze_cloze_current_page)
             toolbar.addAction(analyze_action)
+
+            basic_action = QAction("⚡ Generate Basic", self)
+            basic_action.triggered.connect(self.analyze_basic_current_page)
+            toolbar.addAction(basic_action)
         else:
             self.setWindowTitle("PDFLinker Reader (Review Mode)")
             self.resize(800, 1000)
@@ -1070,31 +1103,37 @@ class PDFViewerWindow(QMainWindow):
         full_url = f"{base_viewer_url}?file={encoded_file_url}#page={page}"
         self.web_view.setUrl(QUrl(full_url))
 
-    def analyze_current_page(self) -> None:
-        js_extract = "(function() { console.log('PDF_EXTRACT_FLASHCARD:' + window.getSelection().toString().trim()); })();"
+    def analyze_cloze_current_page(self) -> None:
+        js_extract = "(function() { console.log('PDF_EXTRACT_CLOZE:' + window.getSelection().toString().trim()); })();"
+        self.web_view.page().runJavaScript(js_extract)
+
+    def analyze_basic_current_page(self) -> None:
+        js_extract = "(function() { console.log('PDF_EXTRACT_BASIC:' + window.getSelection().toString().trim()); })();"
         self.web_view.page().runJavaScript(js_extract)
 
     def explain_current_page(self) -> None:
         js_extract = "(function() { console.log('PDF_EXTRACT_EXPLAIN:' + window.getSelection().toString().trim()); })();"
         self.web_view.page().runJavaScript(js_extract)
 
-    def process_extracted_text(self, extracted_text: str, task: str = "flashcard") -> None:
-        if task == "flashcard":
-            call_gemini_api(extracted_text, task, self, self.on_cards_generated)
+    def process_extracted_text(self, extracted_text: str, task: str = "cloze") -> None:
+        if task in ("cloze", "flashcard", "basic"):
+            call_gemini_api(extracted_text, task, self, lambda res, ext: self.on_cards_generated(res, ext, task))
         elif task == "explain":
             call_gemini_api(extracted_text, task, self, self.on_explanation_generated)
 
-    def on_cards_generated(self, result_data, extracted_text):
+    def on_cards_generated(self, result_data, extracted_text, task="cloze"):
         if hasattr(self, 'generated_cards_window') and self.generated_cards_window.isVisible():
             self.generated_cards_window.cards_data = result_data
             self.generated_cards_window.extracted_text = extracted_text
+            self.generated_cards_window.task = task
             self.generated_cards_window.populate_list()
             tooltip("Flashcards Updated!", period=2000)
         else:
             self.generated_cards_window = GeneratedCardsWindow(
-                regenerate_callback=lambda txt: call_gemini_api(txt, "flashcard", self, self.on_cards_generated),
+                regenerate_callback=lambda txt, t=task: call_gemini_api(txt, t, self, lambda res, ext: self.on_cards_generated(res, ext, t)),
                 cards_data=result_data,
                 extracted_text=extracted_text,
+                task=task,
                 parent=self
             )
             self.generated_cards_window.show()
@@ -1150,14 +1189,23 @@ def launch_creator_viewer() -> None:
     creator_viewer.raise_()
     creator_viewer.activateWindow()
 
-text_to_flashcard_viewer = None
-def launch_text_to_flashcard() -> None:
-    global text_to_flashcard_viewer
-    if not text_to_flashcard_viewer:
-        text_to_flashcard_viewer = TextToFlashcardWindow(parent=mw)
-    text_to_flashcard_viewer.show()
-    text_to_flashcard_viewer.raise_()
-    text_to_flashcard_viewer.activateWindow()
+text_to_cloze_viewer = None
+def launch_text_to_cloze() -> None:
+    global text_to_cloze_viewer
+    if not text_to_cloze_viewer:
+        text_to_cloze_viewer = TextToCardsWindow(task="cloze", parent=mw)
+    text_to_cloze_viewer.show()
+    text_to_cloze_viewer.raise_()
+    text_to_cloze_viewer.activateWindow()
+
+text_to_basic_viewer = None
+def launch_text_to_basic() -> None:
+    global text_to_basic_viewer
+    if not text_to_basic_viewer:
+        text_to_basic_viewer = TextToCardsWindow(task="basic", parent=mw)
+    text_to_basic_viewer.show()
+    text_to_basic_viewer.raise_()
+    text_to_basic_viewer.activateWindow()
 
 text_to_explain_viewer = None
 def launch_text_to_explain() -> None:
@@ -1210,9 +1258,13 @@ def setup_gui():
     
     pdflinker_toolbar.addSeparator()
     
-    text_action = QAction("⚡ Text ➔ Flashcards", mw)
-    text_action.triggered.connect(launch_text_to_flashcard)
-    pdflinker_toolbar.addAction(text_action)
+    cloze_text_action = QAction("⚡ Text ➔ Cloze", mw)
+    cloze_text_action.triggered.connect(launch_text_to_cloze)
+    pdflinker_toolbar.addAction(cloze_text_action)
+
+    basic_text_action = QAction("⚡ Text ➔ Basic", mw)
+    basic_text_action.triggered.connect(launch_text_to_basic)
+    pdflinker_toolbar.addAction(basic_text_action)
 
     explain_text_action = QAction("🧠 Text ➔ Explain", mw)
     explain_text_action.triggered.connect(launch_text_to_explain)

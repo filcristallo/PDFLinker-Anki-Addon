@@ -40,7 +40,16 @@ PDFJS_RELEASE_URL = "https://github.com/mozilla/pdf.js/releases/download/v3.11.1
 GITHUB_URL = "https://github.com/filcristallo/PDFLinker-Anki-Addon"
 BUY_ME_COFFEE_URL = "https://www.buymeacoffee.com/filippocristallo"
 
-DONATORS_LIST = ["Sava"]
+def get_donators_list() -> List[str]:
+    """Loads the list of donators from donators.json."""
+    donators_path = os.path.join(ADDON_DIR, "donators.json")
+    try:
+        if os.path.exists(donators_path):
+            with open(donators_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load donators.json: {e}")
+    return []
 
 # Setup basic logging for the add-on
 logging.basicConfig(level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s')
@@ -445,13 +454,16 @@ def track_action() -> None:
         msg = QMessageBox(mw)
         msg.setWindowTitle("Support PDFLinker")
         
-        donators_html = "<h4>💖 Huge thanks to our supporters:</h4><ul>" + "".join(f"<li><b>{name}</b></li>" for name in DONATORS_LIST) + "</ul>"
+        donators = get_donators_list()
+        donators_html = ""
+        if donators:
+            donators_html = "<hr><h4>💖 Huge thanks to our supporters:</h4><p><b>" + ", ".join(donators) + "</b></p>"
         
         msg.setText("<h3>You've saved hours of work! ⏳</h3>"
                     "<p>PDFLinker has now helped you process over 50 items. Think about how much manual flashcard creation time that has saved you!</p>"
                     "<p>I build and maintain this tool entirely in my free time, giving it away for free to help students like you study smarter.</p>"
                     "<p>If PDFLinker gives you an edge in your studies, <b>please consider buying me a coffee</b>. It directly fuels the late-night coding sessions required to keep this add-on alive, updated, and free. 🙏</p>"
-                    "<hr>" + donators_html)
+                    + donators_html)
         
         coffee_btn = QPushButton("☕ Buy me a coffee (Done)")
         later_btn = QPushButton("Maybe Later")
@@ -474,7 +486,10 @@ def show_support_prompt(parent=None):
     msg_box = QMessageBox(parent)
     msg_box.setWindowTitle("Support PDFLinker")
     
-    donators_html = "<h4>💖 Huge thanks to our supporters:</h4><ul>" + "".join(f"<li><b>{name}</b></li>" for name in DONATORS_LIST) + "</ul>"
+    donators = get_donators_list()
+    donators_html = ""
+    if donators:
+        donators_html = "<hr><h4>💖 Huge thanks to our supporters:</h4><p><b>" + ", ".join(donators) + "</b></p>"
     
     pitch_text = (
         "<h3>PDFLinker will always be 100% free and open source.</h3>"
@@ -482,7 +497,7 @@ def show_support_prompt(parent=None):
         "<p>If PDFLinker has helped you save time, ace an exam, or just made your life a little easier, "
         "and <b>you are in a position to do so</b>—consider buying me a coffee!</p>"
         "<p>It directly fuels the late-night coding sessions required to keep this add-on updated and running smoothly.</p>"
-        "<hr>" + donators_html
+        + donators_html
     )
     msg_box.setText(pitch_text)
     

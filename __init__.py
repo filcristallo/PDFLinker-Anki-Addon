@@ -260,7 +260,7 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
         prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text with optimized cloze syntax.\n'extra': Supporting information, explanations, and context notes."
         mime_type = "application/json"
     elif task == "basic":
-        prompt_template = config.get("basic_prompt", "You are an expert Anki flashcard creator. Create Front/Back flashcards.")
+        prompt_template = config.get("basic_prompt", "")
         prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text (Front of the card).\n'extra': The answer text (Back of the card) and any supporting explanations."
         mime_type = "application/json"
     else:
@@ -835,9 +835,11 @@ class ConfigDialog(QDialog):
         form_layout.addRow("Gemini Model:", self.model_input)
         
         self.thinking_combo = QComboBox()
-        self.thinking_combo.addItems(["", "low", "high"])
+        self.thinking_combo.addItems(["none", "low", "high"])
         current_thinking = self.config.get("thinking_level", "")
-        if current_thinking in ["", "low", "high"]:
+        if current_thinking == "":
+            self.thinking_combo.setCurrentText("none")
+        elif current_thinking in ["low", "high"]:
             self.thinking_combo.setCurrentText(current_thinking)
         form_layout.addRow("Thinking Level:", self.thinking_combo)
         
@@ -882,7 +884,8 @@ class ConfigDialog(QDialog):
     def save_and_close(self):
         self.config["gemini_api_key"] = self.api_key_input.text().strip()
         self.config["gemini_model"] = self.model_input.text().strip()
-        self.config["thinking_level"] = self.thinking_combo.currentText()
+        selected_thinking = self.thinking_combo.currentText()
+        self.config["thinking_level"] = "" if selected_thinking == "none" else selected_thinking
         self.config["ai_prompt"] = self.ai_prompt_input.toPlainText()
         self.config["basic_prompt"] = self.basic_prompt_input.toPlainText()
         self.config["explain_prompt"] = self.explain_prompt_input.toPlainText()

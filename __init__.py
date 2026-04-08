@@ -599,6 +599,84 @@ class ExplanationWindow(QMainWindow):
             self.main_viewer_callback(self.raw_explanation_text, task="flashcard")
 
 
+class TextToExplainWindow(QMainWindow):
+    """Allows users to paste arbitrary text and generate an explanation."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("PDFLinker - Text to Explain")
+        self.resize(600, 400)
+        
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+        
+        self.label = QLabel("<b>Paste text below to generate an explanation:</b>")
+        self.layout.addWidget(self.label)
+        
+        self.text_edit = QTextEdit()
+        self.layout.addWidget(self.text_edit)
+        
+        self.btn_layout = QHBoxLayout()
+        self.btn_layout.addStretch()
+        
+        self.generate_btn = QPushButton("🧠 Explain")
+        self.generate_btn.clicked.connect(self.on_generate_clicked)
+        self.btn_layout.addWidget(self.generate_btn)
+        
+        self.layout.addLayout(self.btn_layout)
+
+    def on_generate_clicked(self):
+        text = self.text_edit.toPlainText().strip()
+        if not text:
+            showInfo("Please paste some text first.")
+            return
+        call_gemini_api(text, "explain", self, self.on_explanation_generated)
+
+    def process_callback(self, extracted_text: str, task: str = "flashcard") -> None:
+        if task == "flashcard":
+            call_gemini_api(extracted_text, task, self, self.on_cards_generated)
+        elif task == "explain":
+            call_gemini_api(extracted_text, task, self, self.on_explanation_generated)
+
+    def on_explanation_generated(self, result_data, extracted_text):
+        self.text_edit.clear()
+        
+        if hasattr(self, 'explanation_window') and self.explanation_window.isVisible():
+            self.explanation_window.update_explanation(result_data, extracted_text)
+            tooltip("Explanation Updated!", period=2000)
+        else:
+            self.explanation_window = ExplanationWindow(
+                main_viewer_callback=self.process_callback,
+                explanation_text=result_data,
+                extracted_text=extracted_text,
+                parent=self
+            )
+            self.explanation_window.show()
+
+    def on_cards_generated(self, result_data, extracted_text):
+        if hasattr(self, 'generated_cards_window') and self.generated_cards_window.isVisible():
+            self.generated_cards_window.cards_data = result_data
+            self.generated_cards_window.extracted_text = extracted_text
+            self.generated_cards_window.populate_list()
+            tooltip("Flashcards Updated!", period=2000)
+        else:
+            self.generated_cards_window = GeneratedCardsWindow(
+                regenerate_callback=lambda txt: call_gemini_api(txt, "flashcard", self, self.on_cards_generated),
+                cards_data=result_data,
+                extracted_text=extracted_text,
+                parent=self
+            )
+            self.generated_cards_window.show()
+
+    def closeEvent(self, event):
+        self.text_edit.clear()
+        if hasattr(self, 'explanation_window') and self.explanation_window:
+            self.explanation_window.close()
+        if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
+            self.generated_cards_window.close()
+        event.accept()
+
+
 class TextToFlashcardWindow(QMainWindow):
     """Allows users to paste arbitrary text and generate cards."""
     def __init__(self, parent=None):

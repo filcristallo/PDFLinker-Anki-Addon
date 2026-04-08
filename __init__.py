@@ -280,13 +280,32 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
     def fetch_from_api():
         req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), method='POST')
         req.add_header('Content-Type', 'application/json')
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=45) as response:
             result = json.loads(response.read().decode('utf-8'))
-            parts = result['candidates'][0]['content']['parts']
+            
+            # Check for safety filter blocks or empty candidates
+            if 'candidates' not in result or not result['candidates']:
+                raise ValueError("No candidates returned. The AI might have blocked the content due to safety filters.")
+                
+            content = result['candidates'][0].get('content', {})
+            parts = content.get('parts', [])
+            if not parts:
+                raise ValueError("The AI returned an empty response.")
+                
             content_text = "".join(part.get("text", "") for part in parts if not part.get("thought", False))
                     
             if task == "flashcard":
-                cards_data = json.loads(content_text)
+                # Clean up markdown formatting if the AI mistakenly outputs it instead of raw JSON
+                cleaned_text = content_text.strip()
+                if cleaned_text.startswith("```json"):
+                    cleaned_text = cleaned_text[7:]
+                elif cleaned_text.startswith("```"):
+                    cleaned_text = cleaned_text[3:]
+                if cleaned_text.endswith("```"):
+                    cleaned_text = cleaned_text[:-3]
+                cleaned_text = cleaned_text.strip()
+
+                cards_data = json.loads(cleaned_text)
                 for card in cards_data:
                     if 'text' in card: card['text'] = clean_ai_text(card['text'])
                     if 'extra' in card: card['extra'] = clean_ai_text(card['extra'])
@@ -299,16 +318,46 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
             on_success(result_data, extracted_text)
         except urllib.error.HTTPError as e:
             error_msg = f"HTTP Error calling AI API: {e.code} - {e.reason}"
-            if e.code == 404:
-                error_msg = f"Error 404: Model not found. Check if '{model_name}' is correct in config."
-            elif e.code == 400:
+            if e.code == 400:
                 error_msg = f"Error 400 (Bad Request): The model '{model_name}' might not support the requested configuration."
+            elif e.code in (401, 403):
+                error_msg = "Error 401/403 (Unauthorized): Invalid Gemini API Key. Please check your configuration."
+            elif e.code == 404:
+                error_msg = f"Error 404: Model not found. Check if '{model_name}' is correct in config."
+            elif e.code == 429:
+                error_msg = "Error 429 (Too Many Requests): You have exceeded your API quota or rate limit."
+            elif e.code >= 500:
+                error_msg = "Error 500+ (Server Error): Google's Gemini API is currently experiencing issues."
+            
+            # Attempt to read the exact error message from Google's response body
+            try:
+                error_body = e.read().decode('utf-8')
+                error_json = json.loads(error_body)
+                if "error" in error_json and "message" in error_json["error"]:
+                    error_msg += f"\n\nDetails: {error_json['error']['message']}"
+            except Exception:
+                pass
+                
             logger.error(error_msg)
             showInfo(error_msg)
             if on_error: on_error(e)
+        except urllib.error.URLError as e:
+            error_msg = f"Network Error: Unable to connect to Google API. Check your internet connection.\nDetails: {e.reason}"
+            logger.error(error_msg)
+            showInfo(error_msg)
+            if on_error: on_error(e)
+        except json.JSONDecodeError as e:
+            logger.exception("AI API JSON Parse Failed")
+            msg = f"Error parsing AI response: The AI did not return a valid JSON format.\n\nDetails: {str(e)}"
+            showInfo(msg)
+            if on_error: on_error(e)
+        except ValueError as e:
+            logger.exception("AI API Value Error")
+            showInfo(f"AI Generation Error:\n{str(e)}")
+            if on_error: on_error(e)
         except Exception as e:
             logger.exception("AI API Call Failed")
-            msg = f"Error parsing AI response: {str(e)}\n\nThe AI might not have returned valid JSON." if task == "flashcard" else f"Error returning AI explanation: {str(e)}"
+            msg = f"Unexpected Error: {str(e)}"
             showInfo(msg)
             if on_error: on_error(e)
 

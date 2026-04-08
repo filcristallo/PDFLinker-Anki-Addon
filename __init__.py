@@ -1057,7 +1057,7 @@ def setup_gui():
     pdflinker_toolbar.setFloatable(False)
     pdflinker_toolbar.toggleViewAction().setEnabled(False)
     
-    label = QLabel(" <b>PDFLinker:</b> ")
+    label = QLabel(" <b>PDFLinker</b> ")
     pdflinker_toolbar.addWidget(label)
 
     create_action = QAction("📝 Creator Mode", mw)

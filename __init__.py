@@ -353,6 +353,7 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
         try:
             result_data = future.result()
             on_success(result_data, extracted_text)
+            track_action()
         except urllib.error.HTTPError as e:
             error_msg = f"HTTP Error calling AI API: {e.code} - {e.reason}"
             if e.code == 400:
@@ -402,8 +403,65 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
 
 
 # ==========================================
-# SUPPORT PROMPT
+# ENGAGEMENT & SUPPORT PROMPTS
 # ==========================================
+
+def track_action() -> None:
+    """Tracks user actions and triggers rate/donate prompts at specific milestones."""
+    conf = get_config()
+    actions = conf.get("action_count", 0) + 1
+    conf["action_count"] = actions
+    
+    rate_target = conf.get("rate_target", 25)
+    coffee_target = conf.get("coffee_target", 50)
+    
+    show_rate = (rate_target != -1 and actions >= rate_target)
+    show_coffee = (coffee_target != -1 and actions >= coffee_target)
+    
+    if show_rate:
+        msg = QMessageBox(mw)
+        msg.setWindowTitle("Enjoying PDFLinker?")
+        msg.setText("<h3>You're on a roll! 🚀</h3>"
+                    "<p>You've used PDFLinker to generate or save items 25 times!</p>"
+                    "<p>If this add-on is saving you time, leaving a quick review on AnkiWeb massively helps other students find it and keeps me motivated to build new features.</p>")
+        
+        rate_btn = QPushButton("⭐ Rate on AnkiWeb (Done)")
+        later_btn = QPushButton("Maybe Later")
+        
+        msg.addButton(rate_btn, QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(later_btn, QMessageBox.ButtonRole.RejectRole)
+        
+        msg.exec()
+        
+        if msg.clickedButton() == rate_btn:
+            conf["rate_target"] = -1
+            webbrowser.open("https://ankiweb.net/shared/info/962234340?cb=1775683908751")
+        else:
+            conf["rate_target"] = actions + 25
+            
+    elif show_coffee:
+        msg = QMessageBox(mw)
+        msg.setWindowTitle("Support PDFLinker")
+        msg.setText("<h3>You've saved hours of work! ⏳</h3>"
+                    "<p>PDFLinker has now helped you process over 50 items. Think about how much manual flashcard creation time that has saved you!</p>"
+                    "<p>I build and maintain this tool entirely in my free time, giving it away for free to help students like you study smarter.</p>"
+                    "<p>If PDFLinker gives you an edge in your studies, <b>please consider buying me a coffee</b>. It directly fuels the late-night coding sessions required to keep this add-on alive, updated, and free. 🙏</p>")
+        
+        coffee_btn = QPushButton("☕ Buy me a coffee (Done)")
+        later_btn = QPushButton("Maybe Later")
+        
+        msg.addButton(coffee_btn, QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(later_btn, QMessageBox.ButtonRole.RejectRole)
+        
+        msg.exec()
+        
+        if msg.clickedButton() == coffee_btn:
+            conf["coffee_target"] = -1
+            webbrowser.open(BUY_ME_COFFEE_URL)
+        else:
+            conf["coffee_target"] = actions + 50
+            
+    save_config(conf)
 
 def show_support_prompt(parent=None):
     """Shows the support message box and opens the link if accepted."""
@@ -657,6 +715,7 @@ class GeneratedCardsWindow(QMainWindow):
                     border: 1px solid #4CAF50;
                 }
             """)
+            track_action()
         else:
             tooltip("Could not find suitable fields (e.g., 'Text', 'Extra') in the current Note Type.")
 

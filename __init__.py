@@ -253,6 +253,7 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
     
     if task == "flashcard":
         prompt_template = config.get("ai_prompt", "")
+        prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text with optimized cloze syntax.\n'extra': Supporting information, explanations, and context notes."
         mime_type = "application/json"
     else:
         prompt_template = config.get("explain_prompt", "Explain this text simply and clearly.")
@@ -1028,6 +1029,15 @@ def launch_text_to_flashcard() -> None:
     text_to_flashcard_viewer.raise_()
     text_to_flashcard_viewer.activateWindow()
 
+text_to_explain_viewer = None
+def launch_text_to_explain() -> None:
+    global text_to_explain_viewer
+    if not text_to_explain_viewer:
+        text_to_explain_viewer = TextToExplainWindow(parent=mw)
+    text_to_explain_viewer.show()
+    text_to_explain_viewer.raise_()
+    text_to_explain_viewer.activateWindow()
+
 def open_config_dialog():
     dialog = ConfigDialog(mw)
     dialog.exec()
@@ -1073,6 +1083,10 @@ def setup_gui():
     text_action = QAction("⚡ Text ➔ Flashcards", mw)
     text_action.triggered.connect(launch_text_to_flashcard)
     pdflinker_toolbar.addAction(text_action)
+
+    explain_text_action = QAction("🧠 Text ➔ Explain", mw)
+    explain_text_action.triggered.connect(launch_text_to_explain)
+    pdflinker_toolbar.addAction(explain_text_action)
 
     pdflinker_toolbar.addSeparator()
 

@@ -365,6 +365,17 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
                     "explain_prompt": "You are a senior-level Language Teacher and a renowned Expert in Linguistics. Your primary goal is to analyze, deconstruct, and explain a complex foreign language text or grammar concept so that it becomes perfectly understandable for a language learner. In doing so, you must maintain absolute accuracy, ensuring no critical grammatical or semantic information is lost.\n\nOBJECTIVE AND COGNITIVE CONSTRAINTS (META LAYER)\nThroughout this task, balance maximum linguistic accessibility with maximum grammatical rigor:\n- Zero Omissions: Do NOT omit key vocabulary, idioms, grammar rules, or sentence structures present in the original text.\n- Zero Hallucinations: Do NOT add external rules or provide advice not strictly derivable from the source text.\n- Apply Plain Language: Use predominantly the active voice. Construct short, linear sentences to explain concepts clearly.\n- Semantic Mapping: Do not arbitrarily remove fundamental grammatical terms. Preserve them in the narrative, but immediately follow them with a brief contextual definition.\n\nMETHODOLOGY (CHAIN OF THOUGHT)\nBefore generating the final text, perform an internal logical analysis:\n1. Identify the Core Message or linguistic focus of the document.\n2. Extract and list exact vocabulary, grammar rules, and syntax patterns that MUST be transferred.\n3. Isolate complex idiomatic terms that will need semantic mapping and formal translation in the glossary.\n\nOUTPUT STRUCTURE AND FORMATTING (TASK LAYER)\nFormat your final output using Markdown, strictly following this order and structure:\n1. Immediate Summary (The Bottom Line): Start with an executive summary of 2-3 clear sentences that capture the essence of the text or rule. Use bold to highlight key concepts.\n2. Layered Explanation (What you need to know): Translate and explain the entire body of the original text. Break down complex sentences, explain idiomatic expressions, and clarify grammar rules used. Separate topics with descriptive headers (H3 ###). Provide multiple usage examples.\n3. The Analogy (Metaphor Bridge): Construct a single powerful analogy to visually explain the most complex grammar rule or concept.\n4. Translated Numbers and Probabilities: If applicable, group and translate any specific quantitative data naturally. If none are present, omit this section.\n5. Explanatory Glossary: Extract all new vocabulary, idiomatic expressions, or grammatical terms used and organize them in a single Markdown table with their translations and explanations."
                 }
             }
+
+        old_ai = config.get("ai_prompt")
+        old_basic = config.get("basic_prompt")
+        old_explain = config.get("explain_prompt")
+        
+        if (old_ai or old_basic or old_explain) and "Legacy Custom" not in profiles:
+            profiles["Legacy Custom"] = {
+                "cloze_prompt": old_ai or profiles["General"]["cloze_prompt"],
+                "basic_prompt": old_basic or profiles["General"]["basic_prompt"],
+                "explain_prompt": old_explain or profiles["General"]["explain_prompt"]
+            }
         
         config["prompt_profiles"] = profiles
         config["last_used_profile"] = "General"
@@ -1182,7 +1193,8 @@ class ConfigDialog(QDialog):
         self.explain_prompt_input = create_prompt_section("Explain Prompt:", "Instructions for explaining difficult concepts.", True)
         
         self.current_profile_name = self.profile_combo.currentText()
-        self.load_profile_data(self.current_profile_name)
+        if self.current_profile_name:
+            self.load_profile_data(self.current_profile_name)
 
         self.profile_combo.currentTextChanged.connect(self.on_profile_changed)
         self.new_profile_btn.clicked.connect(self.create_new_profile)

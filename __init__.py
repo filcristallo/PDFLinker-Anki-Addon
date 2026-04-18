@@ -271,6 +271,46 @@ class CustomWebPage(QWebEnginePage):
 # AI API MANAGER
 # ==========================================
 
+class ProfileSelectDialog(QDialog):
+    def __init__(self, profiles, last_used, task, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Select AI Profile for {task.capitalize()}")
+        self.resize(300, 100)
+        self.layout = QVBoxLayout(self)
+        
+        self.layout.addWidget(QLabel("Select an AI Prompt Profile:"))
+        
+        self.combo = QComboBox()
+        self.combo.addItems(profiles.keys())
+        if last_used in profiles:
+            self.combo.setCurrentText(last_used)
+        self.layout.addWidget(self.combo)
+        
+        self.btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.btn_box.accepted.connect(self.accept)
+        self.btn_box.rejected.connect(self.reject)
+        
+        self.manage_btn = QPushButton("Manage Profiles")
+        self.manage_btn.clicked.connect(self.open_config)
+        self.btn_box.addButton(self.manage_btn, QDialogButtonBox.ButtonRole.ActionRole)
+        
+        self.layout.addWidget(self.btn_box)
+
+    def open_config(self):
+        dialog = ConfigDialog(self)
+        if dialog.exec():
+            # Refresh profiles after managing
+            config = get_config()
+            profiles = config.get("prompt_profiles", {})
+            self.combo.clear()
+            self.combo.addItems(profiles.keys())
+            last_used = config.get("last_used_profile", "Default (General)")
+            if last_used in profiles:
+                self.combo.setCurrentText(last_used)
+
+    def get_selected(self):
+        return self.combo.currentText()
+
 def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_success: Callable, on_error: Callable = None) -> None:
     """
     Standalone function to call the Google Gemini API.
@@ -295,17 +335,58 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
     model_name = config.get("gemini_model", "gemini-3-flash-preview")
     thinking_level = config.get("thinking_level", "")
     
-    if task == "cloze" or task == "flashcard":
-        prompt_template = config.get("ai_prompt", "")
-        prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text with optimized cloze syntax.\n'extra': Supporting information, explanations, and context notes."
-        mime_type = "application/json"
-    elif task == "basic":
-        prompt_template = config.get("basic_prompt", "")
-        prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text (Front of the card).\n'extra': The answer text (Back of the card) and any supporting explanations."
-        mime_type = "application/json"
-    else:
-        prompt_template = config.get("explain_prompt", "Explain this text simply and clearly.")
-        mime_type = "text/plain"
+    # Profile Migration Logic for API Call
+    profiles = config.get("prompt_profiles", {})
+    # Need to check if it's the old format (having 'cloze' and 'basic')
+    if not profiles or "Medicine" not in profiles or "cloze" in profiles.get("Default (General)", {}):
+        try:
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                default_config = json.load(f)
+        except Exception:
+            default_config = {"ai_prompt": "", "basic_prompt": "", "explain_prompt": ""}
+            
+        profiles = {
+            "General": {
+                "flashcard_prompt": "You are an expert Anki flashcard creator, specializing in Instructional Design and Cognitive Psychology. Your task is to transform the provided text into high-quality Anki flashcards, designed to maximize long-term retention and minimize cognitive load during reviews.\n\nCORE FORMULATION RULES (Mandatory):\n\nMinimum Information Principle (Atomicity):\n- Each card must test a SINGLE fact. If a sentence contains multiple pieces of information, split it into multiple independent cards.\n\nContext Anchoring:\n- Each card must be understandable in isolation. Do not assume the user remembers the previous card.\n- No Pronouns: Replace 'it', 'this', 'they' with the explicit name of the subject.\n\nExtra Field Engineering:\n- Provide a concise explanation of 'why' the answer is correct (causal link).\n- Include a 'Do not confuse with...' note if there are similar concepts that could cause memory interference.",
+                "explain_prompt": "You are an expert tutor. Your primary goal is to analyze, deconstruct, and rephrase a complex text so that it becomes perfectly understandable for a non-expert audience.\n\nStructure your output into:\n1. Immediate Summary (The Bottom Line)\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Explanatory Glossary"
+            },
+            "Medicine": {
+                "flashcard_prompt": "You are an expert Medical Anki flashcard creator, specializing in high-yield clinical cards for medical students and doctors. Your task is to extract clinically relevant facts (pathophysiology, diagnosis, treatment, epidemiology) and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on high-yield facts: symptoms, first-line treatments, contraindications, and classic presentations.\n- Minimum Information Principle: Each card must test a SINGLE clinical fact.\n- Context Anchoring: Explicitly state the disease or drug name. No pronouns.\n- Extra Field: Always include pathophysiological rationale or clinical context in the extra field.",
+                "explain_prompt": default_config.get("explain_prompt", "Explain this medical text simply.")
+            },
+            "Language Learning": {
+                "flashcard_prompt": "You are an expert Language Learning Anki flashcard creator. Your task is to extract vocabulary, grammar rules, and useful phrases from the provided text and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on collocations, idioms, and common sentence patterns rather than isolated words.\n- Minimum Information Principle: Test one word/concept per card.\n- Extra Field: Include the translation, grammatical explanation, and at least one additional example sentence.",
+                "explain_prompt": "You are an expert language teacher. Your goal is to explain a foreign language text or grammar concept to a learner.\n\nBreak down complex sentences, explain idiomatic expressions, and clarify grammar rules used in the text. Provide translations and multiple usage examples."
+            }
+        }
+        config["prompt_profiles"] = profiles
+        config["last_used_profile"] = "General"
+        save_config(config)
+
+    last_used = config.get("last_used_profile", "General")
+    prompt_template = ""
+    
+    if task in ("cloze", "flashcard", "basic", "explain"):
+        dialog = ProfileSelectDialog(profiles, last_used, task, parent_window)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_profile = dialog.get_selected()
+            config["last_used_profile"] = selected_profile
+            save_config(config)
+            profile_data = profiles.get(selected_profile, {})
+            
+            if task in ("cloze", "flashcard"):
+                prompt_template = profile_data.get("flashcard_prompt", "") + "\n\nTASK-SPECIFIC RULES (Cloze Deletion):\n- Generate 'Cloze Deletion' flashcards.\n- The hidden answer (cloze) must be short: ideally 1-3 words. Never hide entire complex sentences.\n- Semantic Hints: ALWAYS use the syntax {{c1::answer::hint}}. The hint MUST NOT be a synonym, but the category of the information.\n- Prevent Pattern Matching: Avoid cards where the answer is obvious from sentence structure.\n- Reverse Self-Check: Before generating the card, ask yourself: 'If I only read the part outside the cloze, would the answer be the only logically possible one?'. If not, add specific details (qualifiers) to the question.\n- Ensure HTML tags are entirely inside or outside the cloze."
+                prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text with optimized cloze syntax.\n'extra': Supporting information, explanations, and context notes."
+                mime_type = "application/json"
+            elif task == "basic":
+                prompt_template = profile_data.get("flashcard_prompt", "") + "\n\nTASK-SPECIFIC RULES (Basic Front/Back):\n- Generate 'Basic' (Front/Back) flashcards.\n- The Front should be a clear, concise question. The Back should be a short, direct answer."
+                prompt_template += "\n\nOUTPUT FORMAT:\nReturn EXCLUSIVELY a JSON array of objects. Each object must have exactly these two keys:\n'text': The question text (Front of the card).\n'extra': The answer text (Back of the card) and any supporting explanations."
+                mime_type = "application/json"
+            else:
+                prompt_template = profile_data.get("explain_prompt", "Explain this text simply and clearly.")
+                mime_type = "text/plain"
+        else:
+            return # User cancelled
 
     if not model_name or not prompt_template:
         showInfo("Please set 'gemini_model' and the respective prompt in your Anki add-on config.")
@@ -1026,24 +1107,70 @@ class ConfigDialog(QDialog):
         prompt_help_label.setStyleSheet("color: gray; margin-top: 10px; margin-bottom: 5px;")
         layout.addWidget(prompt_help_label)
         
-        def create_prompt_section(title, tooltip_text, dict_key):
+        # --- Profiles Management ---
+        profile_layout = QHBoxLayout()
+        profile_layout.addWidget(QLabel("<b>Prompt Profile:</b>"))
+        
+        self.profiles = self.config.get("prompt_profiles", {})
+        if not self.profiles or "Medicine" not in self.profiles or "cloze" in self.profiles.get("Default (General)", {}):
+            try:
+                with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                    default_config = json.load(f)
+            except Exception:
+                default_config = {"ai_prompt": "", "basic_prompt": "", "explain_prompt": ""}
+            self.profiles = {
+                "General": {
+                    "flashcard_prompt": "You are an expert Anki flashcard creator, specializing in Instructional Design and Cognitive Psychology. Your task is to transform the provided text into high-quality Anki flashcards, designed to maximize long-term retention and minimize cognitive load during reviews.\n\nCORE FORMULATION RULES (Mandatory):\n\nMinimum Information Principle (Atomicity):\n- Each card must test a SINGLE fact. If a sentence contains multiple pieces of information, split it into multiple independent cards.\n\nContext Anchoring:\n- Each card must be understandable in isolation. Do not assume the user remembers the previous card.\n- No Pronouns: Replace 'it', 'this', 'they' with the explicit name of the subject.\n\nExtra Field Engineering:\n- Provide a concise explanation of 'why' the answer is correct (causal link).\n- Include a 'Do not confuse with...' note if there are similar concepts that could cause memory interference.",
+                    "explain_prompt": "You are an expert tutor. Your primary goal is to analyze, deconstruct, and rephrase a complex text so that it becomes perfectly understandable for a non-expert audience.\n\nStructure your output into:\n1. Immediate Summary (The Bottom Line)\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Explanatory Glossary"
+                },
+                "Medicine": {
+                    "flashcard_prompt": "You are an expert Medical Anki flashcard creator, specializing in high-yield clinical cards for medical students and doctors. Your task is to extract clinically relevant facts (pathophysiology, diagnosis, treatment, epidemiology) and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on high-yield facts: symptoms, first-line treatments, contraindications, and classic presentations.\n- Minimum Information Principle: Each card must test a SINGLE clinical fact.\n- Context Anchoring: Explicitly state the disease or drug name. No pronouns.\n- Extra Field: Always include pathophysiological rationale or clinical context in the extra field.",
+                    "explain_prompt": default_config.get("explain_prompt", "Explain this medical text simply.")
+                },
+                "Language Learning": {
+                    "flashcard_prompt": "You are an expert Language Learning Anki flashcard creator. Your task is to extract vocabulary, grammar rules, and useful phrases from the provided text and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on collocations, idioms, and common sentence patterns rather than isolated words.\n- Minimum Information Principle: Test one word/concept per card.\n- Extra Field: Include the translation, grammatical explanation, and at least one additional example sentence.",
+                    "explain_prompt": "You are an expert language teacher. Your goal is to explain a foreign language text or grammar concept to a learner.\n\nBreak down complex sentences, explain idiomatic expressions, and clarify grammar rules used in the text. Provide translations and multiple usage examples."
+                }
+            }
+            self.config["prompt_profiles"] = self.profiles
+            self.config["last_used_profile"] = "General"
+
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItems(self.profiles.keys())
+        last_used = self.config.get("last_used_profile", "General")
+        if last_used in self.profiles:
+            self.profile_combo.setCurrentText(last_used)
+            
+        self.new_profile_btn = QPushButton("New")
+        self.delete_profile_btn = QPushButton("Delete")
+        
+        profile_layout.addWidget(self.profile_combo)
+        profile_layout.addWidget(self.new_profile_btn)
+        profile_layout.addWidget(self.delete_profile_btn)
+        layout.addLayout(profile_layout)
+        # -----------------------------
+        
+        def create_prompt_section(title, tooltip_text, is_profile_specific=True):
             header_layout = QHBoxLayout()
             header_layout.addWidget(QLabel(f"<b>{title}</b>"))
             header_layout.addStretch()
-            reset_btn = QPushButton("Reset to Default")
-            header_layout.addWidget(reset_btn)
             layout.addLayout(header_layout)
             
-            text_edit = QTextEdit(self.config.get(dict_key, ""))
+            text_edit = QTextEdit()
             text_edit.setToolTip(tooltip_text)
             layout.addWidget(text_edit)
             
-            reset_btn.clicked.connect(lambda _, k=dict_key, te=text_edit: self.reset_prompt(k, te))
             return text_edit
 
-        self.ai_prompt_input = create_prompt_section("AI Flashcard Prompt (Cloze):", "Instructions for generating fill-in-the-blank cards.", "ai_prompt")
-        self.basic_prompt_input = create_prompt_section("AI Basic Prompt (Front/Back):", "Instructions for generating standard Q&A cards.", "basic_prompt")
-        self.explain_prompt_input = create_prompt_section("AI Explain Prompt:", "Instructions for explaining difficult concepts.", "explain_prompt")
+        self.flashcard_prompt_input = create_prompt_section("Flashcard Prompt (Basic & Cloze):", "Instructions for generating flashcards.", True)
+        self.explain_prompt_input = create_prompt_section("Explain Prompt:", "Instructions for explaining difficult concepts.", True)
+        
+        self.current_profile_name = self.profile_combo.currentText()
+        self.load_profile_data(self.current_profile_name)
+
+        self.profile_combo.currentTextChanged.connect(self.on_profile_changed)
+        self.new_profile_btn.clicked.connect(self.create_new_profile)
+        self.delete_profile_btn.clicked.connect(self.delete_profile)
         
         btn_layout = QHBoxLayout()
         
@@ -1078,14 +1205,55 @@ class ConfigDialog(QDialog):
         except Exception as e:
             tooltip(f"Failed to load default config: {e}")
 
+    def load_profile_data(self, profile_name):
+        data = self.profiles.get(profile_name, {})
+        self.flashcard_prompt_input.setPlainText(data.get("flashcard_prompt", ""))
+        self.explain_prompt_input.setPlainText(data.get("explain_prompt", ""))
+
+    def save_current_profile_data(self):
+        if self.current_profile_name in self.profiles:
+            self.profiles[self.current_profile_name]["flashcard_prompt"] = self.flashcard_prompt_input.toPlainText()
+            self.profiles[self.current_profile_name]["explain_prompt"] = self.explain_prompt_input.toPlainText()
+
+    def on_profile_changed(self, profile_name):
+        if not profile_name:
+            return
+        self.save_current_profile_data()
+        self.current_profile_name = profile_name
+        self.load_profile_data(profile_name)
+
+    def create_new_profile(self):
+        name, ok = QInputDialog.getText(self, "New Profile", "Enter profile name:")
+        if ok and name and name not in self.profiles:
+            self.save_current_profile_data()
+            self.profiles[name] = {
+                "flashcard_prompt": "You are an expert Anki flashcard creator...",
+                "explain_prompt": "Explain this text simply and clearly."
+            }
+            self.profile_combo.addItem(name)
+            self.profile_combo.setCurrentText(name)
+
+    def delete_profile(self):
+        name = self.profile_combo.currentText()
+        if name == "General":
+            showInfo("Cannot delete the General profile.")
+            return
+        
+        reply = QMessageBox.question(self, "Delete Profile", f"Are you sure you want to delete profile '{name}'?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            del self.profiles[name]
+            self.profile_combo.removeItem(self.profile_combo.currentIndex())
+
     def save_and_close(self):
         self.config["gemini_api_key"] = self.api_key_input.text().strip()
         self.config["gemini_model"] = self.model_input.text().strip()
         selected_thinking = self.thinking_combo.currentText()
         self.config["thinking_level"] = "" if selected_thinking == "none" else selected_thinking
-        self.config["ai_prompt"] = self.ai_prompt_input.toPlainText()
-        self.config["basic_prompt"] = self.basic_prompt_input.toPlainText()
-        self.config["explain_prompt"] = self.explain_prompt_input.toPlainText()
+        
+        self.save_current_profile_data()
+        self.config["prompt_profiles"] = self.profiles
+        self.config["last_used_profile"] = self.profile_combo.currentText()
         
         save_config(self.config)
         tooltip("Configuration saved successfully.")

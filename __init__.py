@@ -296,6 +296,10 @@ class ProfileSelectDialog(QDialog):
         self.btn_box.accepted.connect(self.accept)
         self.btn_box.rejected.connect(self.reject)
         
+        ok_btn = self.btn_box.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setDefault(True)
+        
         self.manage_btn = QPushButton("Manage Profiles")
         self.manage_btn.clicked.connect(self.open_config)
         self.btn_box.addButton(self.manage_btn, QDialogButtonBox.ButtonRole.ActionRole)

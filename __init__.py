@@ -310,6 +310,7 @@ class ProfileSelectDialog(QDialog):
         if ok_btn:
             ok_btn.setDefault(True)
             ok_btn.setAutoDefault(True)
+            ok_btn.setFocus()
 
     def open_config(self):
         dialog = ConfigDialog(self)

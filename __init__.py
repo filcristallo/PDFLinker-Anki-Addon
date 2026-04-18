@@ -1230,14 +1230,9 @@ class ConfigDialog(QDialog):
         
         layout.addLayout(btn_layout)
 
-    def reset_prompt(self, key: str, text_edit: QTextEdit):
-        try:
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                default_config = json.load(f)
-            if key in default_config:
-                text_edit.setPlainText(default_config[key])
-        except Exception as e:
-            tcloze_prompt_input.setPlainText(data.get("cloze_prompt", data.get("flashcard_prompt", "")))
+    def load_profile_data(self, profile_name: str):
+        data = self.profiles.get(profile_name, {})
+        self.cloze_prompt_input.setPlainText(data.get("cloze_prompt", data.get("flashcard_prompt", "")))
         self.basic_prompt_input.setPlainText(data.get("basic_prompt", data.get("flashcard_prompt", "")))
         self.explain_prompt_input.setPlainText(data.get("explain_prompt", ""))
 

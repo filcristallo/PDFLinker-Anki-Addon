@@ -293,21 +293,23 @@ class ProfileSelectDialog(QDialog):
         self.layout.addWidget(self.combo)
         
         self.btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.layout.addWidget(self.btn_box)
+        
         self.btn_box.accepted.connect(self.accept)
         self.btn_box.rejected.connect(self.reject)
         
-        ok_btn = self.btn_box.button(QDialogButtonBox.StandardButton.Ok)
-        
         self.manage_btn = QPushButton("Manage Profiles")
-        self.manage_btn.setAutoDefault(False)
         self.manage_btn.clicked.connect(self.open_config)
         self.btn_box.addButton(self.manage_btn, QDialogButtonBox.ButtonRole.ActionRole)
         
+        for btn in self.btn_box.buttons():
+            btn.setAutoDefault(False)
+            btn.setDefault(False)
+            
+        ok_btn = self.btn_box.button(QDialogButtonBox.StandardButton.Ok)
         if ok_btn:
             ok_btn.setDefault(True)
             ok_btn.setAutoDefault(True)
-        
-        self.layout.addWidget(self.btn_box)
 
     def open_config(self):
         dialog = ConfigDialog(self)

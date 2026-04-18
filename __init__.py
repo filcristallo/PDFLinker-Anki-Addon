@@ -114,20 +114,30 @@ def mark_first_run_complete() -> None:
 # CACHE SYSTEM & TEXT FORMATTING
 # ==========================================
 
+_local_cache = None
+
 def get_cache_data() -> Dict[str, Any]:
     """Loads cached data (e.g., last viewed page for each PDF) from the local cache file."""
+    global _local_cache
+    if _local_cache is not None:
+        return _local_cache
+        
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                _local_cache = json.load(f)
+                return _local_cache
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode cache file: {e}")
         except Exception as e:
             logger.error(f"Unexpected error reading cache: {e}")
-    return {}
+    _local_cache = {}
+    return _local_cache
 
 def save_cache_data(data: Dict[str, Any]) -> None:
     """Saves data (e.g., last viewed page) to the local cache file."""
+    global _local_cache
+    _local_cache = data
     try:
         os.makedirs(USER_FILES_DIR, exist_ok=True)
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
@@ -186,19 +196,15 @@ def clean_ai_text(text: str) -> str:
     if in_table: html_lines.append('</table>')
     text = '\n'.join(html_lines)
     
-    for i in range(6, 0, -1):
-        hashes = '#' * i
-        text = re.sub(fr'^{hashes}\s+(.*?)$', fr'<h{i}>\1</h{i}>', text, flags=re.MULTILINE)
+    text = re.sub(r'^(#{1,6})\s+(.*?)$', lambda m: f'<h{len(m.group(1))}>{m.group(2)}</h{len(m.group(1))}>', text, flags=re.MULTILINE)
     
     text = re.sub(r'^(\s*)[-*+]\s+(.*?)$', r'<ul><li>\2</li></ul>', text, flags=re.MULTILINE)
     text = re.sub(r'^(\s*)\d+\.\s+(.*?)$', r'<ol><li>\2</li></ol>', text, flags=re.MULTILINE)
     text = re.sub(r'</ul>\s*<ul>', '', text)
     text = re.sub(r'</ol>\s*<ol>', '', text)
     
-    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text, flags=re.DOTALL)
-    text = re.sub(r'__(.*?)__', r'<b>\1</b>', text, flags=re.DOTALL)
-    text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
-    text = re.sub(r'_(.*?)_', r'<i>\1</i>', text)
+    text = re.sub(r'(\*\*|__)(.*?)\1', r'<b>\2</b>', text, flags=re.DOTALL)
+    text = re.sub(r'(?<!\w)(\*|_)(.*?)\1(?!\w)', r'<i>\2</i>', text)
     
     text = text.replace('\n\n', '<br><br>')
     text = text.replace('\n', '<br>')

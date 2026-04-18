@@ -1225,17 +1225,17 @@ class PDFViewerWindow(QMainWindow):
             open_action = QAction("📂 Open PDF for Study...", self)
             open_action.triggered.connect(self.open_local_pdf)
             toolbar.addAction(open_action)
-            
-            analyze_action = QAction("⚡ Generate Cloze", self)
-            analyze_action.triggered.connect(self.analyze_cloze_current_page)
-            toolbar.addAction(analyze_action)
-
-            basic_action = QAction("⚡ Generate Basic", self)
-            basic_action.triggered.connect(self.analyze_basic_current_page)
-            toolbar.addAction(basic_action)
         else:
             self.setWindowTitle("PDFLinker Reader (Review Mode)")
             self.resize(800, 1000)
+
+        analyze_action = QAction("⚡ Generate Cloze", self)
+        analyze_action.triggered.connect(self.analyze_cloze_current_page)
+        toolbar.addAction(analyze_action)
+
+        basic_action = QAction("⚡ Generate Basic", self)
+        basic_action.triggered.connect(self.analyze_basic_current_page)
+        toolbar.addAction(basic_action)
 
         explain_action = QAction("🧠 Explain", self)
         explain_action.triggered.connect(self.explain_current_page)

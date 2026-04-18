@@ -46,7 +46,7 @@ To use the AI generation features, you need a free Google Gemini API key.
 1. Get an API key from [Google AI Studio](https://aistudio.google.com/).
 2. In Anki, go to **Tools -> Add-ons -> PDFLinker -> Config**.
 3. Paste your key into the `gemini_api_key` field.
-4. (Optional) Adjust the `ai_prompt` or `explain_prompt` to fit your specific study needs.
+4. (Optional) Select, edit, or create AI **Prompt Profiles** to fit your specific study needs.
 
 ### Field Setup (Important)
 For the auto-sync to work, ensure your Anki Note Type has the following fields:

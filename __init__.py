@@ -342,23 +342,27 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
         try:
             with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                 default_config = json.load(f)
+                if "prompt_profiles" in default_config:
+                    profiles = default_config["prompt_profiles"]
         except Exception:
-            default_config = {"ai_prompt": "", "basic_prompt": "", "explain_prompt": ""}
-            
-        profiles = {
-            "General": {
-                "flashcard_prompt": "You are an expert Anki flashcard creator, specializing in Instructional Design and Cognitive Psychology. Your task is to transform the provided text into high-quality Anki flashcards, designed to maximize long-term retention and minimize cognitive load during reviews.\n\nCORE FORMULATION RULES (Mandatory):\n\nMinimum Information Principle (Atomicity):\n- Each card must test a SINGLE fact. If a sentence contains multiple pieces of information, split it into multiple independent cards.\n\nContext Anchoring:\n- Each card must be understandable in isolation. Do not assume the user remembers the previous card.\n- No Pronouns: Replace 'it', 'this', 'they' with the explicit name of the subject.\n\nExtra Field Engineering:\n- Provide a concise explanation of 'why' the answer is correct (causal link).\n- Include a 'Do not confuse with...' note if there are similar concepts that could cause memory interference.",
-                "explain_prompt": "You are an expert tutor. Your primary goal is to analyze, deconstruct, and rephrase a complex text so that it becomes perfectly understandable for a non-expert audience.\n\nStructure your output into:\n1. Immediate Summary (The Bottom Line)\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Explanatory Glossary"
-            },
-            "Medicine": {
-                "flashcard_prompt": "You are an expert Medical Anki flashcard creator, specializing in high-yield clinical cards for medical students and doctors. Your task is to extract clinically relevant facts (pathophysiology, diagnosis, treatment, epidemiology) and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on high-yield facts: symptoms, first-line treatments, contraindications, and classic presentations.\n- Minimum Information Principle: Each card must test a SINGLE clinical fact.\n- Context Anchoring: Explicitly state the disease or drug name. No pronouns.\n- Extra Field: Always include pathophysiological rationale or clinical context in the extra field.",
-                "explain_prompt": default_config.get("explain_prompt", "Explain this medical text simply.")
-            },
-            "Language Learning": {
-                "flashcard_prompt": "You are an expert Language Learning Anki flashcard creator. Your task is to extract vocabulary, grammar rules, and useful phrases from the provided text and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on collocations, idioms, and common sentence patterns rather than isolated words.\n- Minimum Information Principle: Test one word/concept per card.\n- Extra Field: Include the translation, grammatical explanation, and at least one additional example sentence.",
-                "explain_prompt": "You are an expert language teacher. Your goal is to explain a foreign language text or grammar concept to a learner.\n\nBreak down complex sentences, explain idiomatic expressions, and clarify grammar rules used in the text. Provide translations and multiple usage examples."
+            pass
+
+        if not profiles or "Medicine" not in profiles:
+            profiles = {
+                "General": {
+                    "flashcard_prompt": "You are an expert Anki flashcard creator, specializing in Instructional Design and Cognitive Psychology. Your task is to transform the provided text into high-quality Anki flashcards, designed to maximize long-term retention and minimize cognitive load during reviews.\n\nCORE FORMULATION RULES (Mandatory):\n\nMinimum Information Principle (Atomicity):\n- Each card must test a SINGLE fact. If a sentence contains multiple pieces of information, split it into multiple independent cards.\n\nContext Anchoring:\n- Each card must be understandable in isolation. Do not assume the user remembers the previous card.\n- No Pronouns: Replace 'it', 'this', 'they' with the explicit name of the subject.\n\nExtra Field Engineering:\n- Provide a concise explanation of 'why' the answer is correct (causal link).\n- Include a 'Do not confuse with...' note if there are similar concepts that could cause memory interference.",
+                    "explain_prompt": "You are an expert tutor. Your primary goal is to analyze, deconstruct, and rephrase a complex text so that it becomes perfectly understandable for a non-expert audience.\n\nStructure your output into:\n1. Immediate Summary (The Bottom Line)\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Explanatory Glossary"
+                },
+                "Medicine": {
+                    "flashcard_prompt": "You are an expert Medical Anki flashcard creator, specializing in high-yield clinical cards for medical students and doctors. Your task is to extract clinically relevant facts (pathophysiology, diagnosis, treatment, epidemiology) and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on high-yield facts: symptoms, first-line treatments, contraindications, and classic presentations.\n- Minimum Information Principle: Each card must test a SINGLE clinical fact.\n- Context Anchoring: Explicitly state the disease or drug name. No pronouns.\n- Extra Field: Always include pathophysiological rationale or clinical context in the extra field.",
+                    "explain_prompt": "You are a senior Medical Science Liaison and Health Literacy Expert. Your primary goal is to analyze, deconstruct, and rephrase a complex medical/scientific text so that it becomes perfectly understandable for a non-expert audience (such as patients or non-clinical decision-makers). Maintain absolute and rigorous scientific fidelity.\n\nStructure your output into:\n1. Immediate Summary\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Translated Numbers and Probabilities\n5. Explanatory Clinical Glossary"
+                },
+                "Language Learning": {
+                    "flashcard_prompt": "You are an expert Language Learning Anki flashcard creator. Your task is to extract vocabulary, grammar rules, and useful phrases from the provided text and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on collocations, idioms, and common sentence patterns rather than isolated words.\n- Minimum Information Principle: Test one word/concept per card.\n- Extra Field: Include the translation, grammatical explanation, and at least one additional example sentence.",
+                    "explain_prompt": "You are an expert language teacher. Your goal is to explain a foreign language text or grammar concept to a learner.\n\nBreak down complex sentences, explain idiomatic expressions, and clarify grammar rules used in the text. Provide translations and multiple usage examples."
+                }
             }
-        }
+        
         config["prompt_profiles"] = profiles
         config["last_used_profile"] = "General"
         save_config(config)
@@ -1116,22 +1120,26 @@ class ConfigDialog(QDialog):
             try:
                 with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                     default_config = json.load(f)
+                    if "prompt_profiles" in default_config:
+                        self.profiles = default_config["prompt_profiles"]
             except Exception:
-                default_config = {"ai_prompt": "", "basic_prompt": "", "explain_prompt": ""}
-            self.profiles = {
-                "General": {
-                    "flashcard_prompt": "You are an expert Anki flashcard creator, specializing in Instructional Design and Cognitive Psychology. Your task is to transform the provided text into high-quality Anki flashcards, designed to maximize long-term retention and minimize cognitive load during reviews.\n\nCORE FORMULATION RULES (Mandatory):\n\nMinimum Information Principle (Atomicity):\n- Each card must test a SINGLE fact. If a sentence contains multiple pieces of information, split it into multiple independent cards.\n\nContext Anchoring:\n- Each card must be understandable in isolation. Do not assume the user remembers the previous card.\n- No Pronouns: Replace 'it', 'this', 'they' with the explicit name of the subject.\n\nExtra Field Engineering:\n- Provide a concise explanation of 'why' the answer is correct (causal link).\n- Include a 'Do not confuse with...' note if there are similar concepts that could cause memory interference.",
-                    "explain_prompt": "You are an expert tutor. Your primary goal is to analyze, deconstruct, and rephrase a complex text so that it becomes perfectly understandable for a non-expert audience.\n\nStructure your output into:\n1. Immediate Summary (The Bottom Line)\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Explanatory Glossary"
-                },
-                "Medicine": {
-                    "flashcard_prompt": "You are an expert Medical Anki flashcard creator, specializing in high-yield clinical cards for medical students and doctors. Your task is to extract clinically relevant facts (pathophysiology, diagnosis, treatment, epidemiology) and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on high-yield facts: symptoms, first-line treatments, contraindications, and classic presentations.\n- Minimum Information Principle: Each card must test a SINGLE clinical fact.\n- Context Anchoring: Explicitly state the disease or drug name. No pronouns.\n- Extra Field: Always include pathophysiological rationale or clinical context in the extra field.",
-                    "explain_prompt": default_config.get("explain_prompt", "Explain this medical text simply.")
-                },
-                "Language Learning": {
-                    "flashcard_prompt": "You are an expert Language Learning Anki flashcard creator. Your task is to extract vocabulary, grammar rules, and useful phrases from the provided text and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on collocations, idioms, and common sentence patterns rather than isolated words.\n- Minimum Information Principle: Test one word/concept per card.\n- Extra Field: Include the translation, grammatical explanation, and at least one additional example sentence.",
-                    "explain_prompt": "You are an expert language teacher. Your goal is to explain a foreign language text or grammar concept to a learner.\n\nBreak down complex sentences, explain idiomatic expressions, and clarify grammar rules used in the text. Provide translations and multiple usage examples."
+                pass
+                
+            if not self.profiles or "Medicine" not in self.profiles:
+                self.profiles = {
+                    "General": {
+                        "flashcard_prompt": "You are an expert Anki flashcard creator, specializing in Instructional Design and Cognitive Psychology. Your task is to transform the provided text into high-quality Anki flashcards, designed to maximize long-term retention and minimize cognitive load during reviews.\n\nCORE FORMULATION RULES (Mandatory):\n\nMinimum Information Principle (Atomicity):\n- Each card must test a SINGLE fact. If a sentence contains multiple pieces of information, split it into multiple independent cards.\n\nContext Anchoring:\n- Each card must be understandable in isolation. Do not assume the user remembers the previous card.\n- No Pronouns: Replace 'it', 'this', 'they' with the explicit name of the subject.\n\nExtra Field Engineering:\n- Provide a concise explanation of 'why' the answer is correct (causal link).\n- Include a 'Do not confuse with...' note if there are similar concepts that could cause memory interference.",
+                        "explain_prompt": "You are an expert tutor. Your primary goal is to analyze, deconstruct, and rephrase a complex text so that it becomes perfectly understandable for a non-expert audience.\n\nStructure your output into:\n1. Immediate Summary (The Bottom Line)\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Explanatory Glossary"
+                    },
+                    "Medicine": {
+                        "flashcard_prompt": "You are an expert Medical Anki flashcard creator, specializing in high-yield clinical cards for medical students and doctors. Your task is to extract clinically relevant facts (pathophysiology, diagnosis, treatment, epidemiology) and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on high-yield facts: symptoms, first-line treatments, contraindications, and classic presentations.\n- Minimum Information Principle: Each card must test a SINGLE clinical fact.\n- Context Anchoring: Explicitly state the disease or drug name. No pronouns.\n- Extra Field: Always include pathophysiological rationale or clinical context in the extra field.",
+                        "explain_prompt": "You are a senior Medical Science Liaison and Health Literacy Expert. Your primary goal is to analyze, deconstruct, and rephrase a complex medical/scientific text so that it becomes perfectly understandable for a non-expert audience (such as patients or non-clinical decision-makers). Maintain absolute and rigorous scientific fidelity.\n\nStructure your output into:\n1. Immediate Summary\n2. Layered Explanation\n3. The Analogy (Metaphor Bridge)\n4. Translated Numbers and Probabilities\n5. Explanatory Clinical Glossary"
+                    },
+                    "Language Learning": {
+                        "flashcard_prompt": "You are an expert Language Learning Anki flashcard creator. Your task is to extract vocabulary, grammar rules, and useful phrases from the provided text and convert them into Anki flashcards.\n\nCORE FORMULATION RULES:\n- Focus on collocations, idioms, and common sentence patterns rather than isolated words.\n- Minimum Information Principle: Test one word/concept per card.\n- Extra Field: Include the translation, grammatical explanation, and at least one additional example sentence.",
+                        "explain_prompt": "You are an expert language teacher. Your goal is to explain a foreign language text or grammar concept to a learner.\n\nBreak down complex sentences, explain idiomatic expressions, and clarify grammar rules used in the text. Provide translations and multiple usage examples."
+                    }
                 }
-            }
             self.config["prompt_profiles"] = self.profiles
             self.config["last_used_profile"] = "General"
 

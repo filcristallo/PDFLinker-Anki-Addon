@@ -327,7 +327,7 @@ class ProfileSelectDialog(QDialog):
     def get_selected(self):
         return self.combo.currentText()
 
-def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_success: Callable, on_error: Callable = None) -> None:
+def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_success: Callable, on_error: Callable = None, enable_search: bool = False) -> None:
     """
     Standalone function to call the Google Gemini API.
     
@@ -439,6 +439,9 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
         "generationConfig": {"response_mime_type": mime_type}
     }
     
+    if enable_search:
+        data["tools"] = [{"googleSearch": {}}]
+        
     if thinking_level:
         data["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
     
@@ -1436,13 +1439,9 @@ class PDFViewerWindow(QMainWindow):
             self.setWindowTitle("PDFLinker Reader (Review Mode)")
             self.resize(800, 1000)
 
-        analyze_action = QAction("⚡ Generate Cloze", self)
-        analyze_action.triggered.connect(self.analyze_cloze_current_page)
-        toolbar.addAction(analyze_action)
-
-        basic_action = QAction("⚡ Generate Basic", self)
-        basic_action.triggered.connect(self.analyze_basic_current_page)
-        toolbar.addAction(basic_action)
+        flashcard_action = QAction("⚡ Generate Flashcard", self)
+        flashcard_action.triggered.connect(self.generate_flashcard_current_page)
+        toolbar.addAction(flashcard_action)
 
         explain_action = QAction("🧠 Explain", self)
         explain_action.triggered.connect(self.explain_current_page)
@@ -1520,12 +1519,10 @@ class PDFViewerWindow(QMainWindow):
         full_url = f"{base_viewer_url}?file={encoded_file_url}#page={page}"
         self.web_view.setUrl(QUrl(full_url))
 
-    def analyze_cloze_current_page(self) -> None:
-        js_extract = "(function() { console.log('PDF_EXTRACT_CLOZE:' + window.getSelection().toString().trim()); })();"
-        self.web_view.page().runJavaScript(js_extract)
-
-    def analyze_basic_current_page(self) -> None:
-        js_extract = "(function() { console.log('PDF_EXTRACT_BASIC:' + window.getSelection().toString().trim()); })();"
+    def generate_flashcard_current_page(self) -> None:
+        task = ask_flashcard_type(self)
+        if not task: return
+        js_extract = f"(function() {{ console.log('PDF_EXTRACT_{task.upper()}:' + window.getSelection().toString().trim()); }})();"
         self.web_view.page().runJavaScript(js_extract)
 
     def explain_current_page(self) -> None:
@@ -1630,7 +1627,7 @@ def launch_text_to_flashcard() -> None:
         title_type = "Cloze" if task == "cloze" else "Basic"
         text_to_cards_viewer.setWindowTitle(f"PDFLinker - Text to {title_type}")
         text_to_cards_viewer.label.setText(f"<b>Paste text below to generate {title_type.lower()} flashcards:</b>")
-        text_to_cards_viewer.text_edit.setPlaceholderText(f"Paste your notes or book text here.\\n\\nThe AI will automatically generate {title_type.lower()} flashcards from it...")
+        text_to_cards_viewer.text_edit.setPlaceholderText(f"Paste your notes or book text here.\n\nThe AI will automatically generate {title_type.lower()} flashcards from it...")
         text_to_cards_viewer.generate_btn.setText(f"⚡ Generate {title_type}")
     text_to_cards_viewer.show()
     text_to_cards_viewer.raise_()
@@ -1695,9 +1692,9 @@ def launch_url_or_youtube(task_type: str, is_youtube: bool) -> None:
             return
             
         if task == "explain":
-            call_gemini_api(url_str, task, mw, standalone_ai_handler.on_explanation_generated)
+            call_gemini_api(url_str, task, mw, standalone_ai_handler.on_explanation_generated, enable_search=True)
         else:
-            call_gemini_api(url_str, task, mw, lambda res, ext: standalone_ai_handler.on_cards_generated(res, ext, task))
+            call_gemini_api(url_str, task, mw, lambda res, ext: standalone_ai_handler.on_cards_generated(res, ext, task), enable_search=True)
 
 def open_config_dialog():
     dialog = ConfigDialog(mw)

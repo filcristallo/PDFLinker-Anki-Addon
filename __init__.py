@@ -65,10 +65,13 @@ def setup_dependencies() -> None:
     zip_path = os.path.join(PDFJS_DIR, "pdfjs.zip")
     
     def download_pdfjs() -> None:
-        urllib.request.urlretrieve(PDFJS_RELEASE_URL, zip_path)
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(PDFJS_DIR)
-        os.remove(zip_path)
+        try:
+            urllib.request.urlretrieve(PDFJS_RELEASE_URL, zip_path)
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(PDFJS_DIR)
+        finally:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
         
     def on_download_done(future) -> None:
         try:
@@ -320,7 +323,7 @@ class ProfileSelectDialog(QDialog):
             profiles = config.get("prompt_profiles", {})
             self.combo.clear()
             self.combo.addItems(profiles.keys())
-            last_used = config.get("last_used_profile", "Default (General)")
+            last_used = config.get("last_used_profile", "General")
             if last_used in profiles:
                 self.combo.setCurrentText(last_used)
 
@@ -995,10 +998,16 @@ class TextToExplainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.text_edit.clear()
-        if hasattr(self, 'explanation_window') and self.explanation_window:
-            self.explanation_window.close()
-        if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
-            self.generated_cards_window.close()
+        try:
+            if hasattr(self, 'explanation_window') and self.explanation_window:
+                self.explanation_window.close()
+        except RuntimeError:
+            pass  # Window already deleted by C++
+        try:
+            if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
+                self.generated_cards_window.close()
+        except RuntimeError:
+            pass
         event.accept()
 
 
@@ -1063,8 +1072,11 @@ class TextToCardsWindow(QMainWindow):
         # 2. Clear the text box if the user closes the window
         self.text_edit.clear()
         
-        if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
-            self.generated_cards_window.close()
+        try:
+            if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
+                self.generated_cards_window.close()
+        except RuntimeError:
+            pass  # Already deleted in C++
             
         event.accept()
 
@@ -1567,11 +1579,17 @@ class PDFViewerWindow(QMainWindow):
         elif self.mode == "create":
             creator_viewer = None
             
-        if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
-            self.generated_cards_window.close()
+        try:
+            if hasattr(self, 'generated_cards_window') and self.generated_cards_window:
+                self.generated_cards_window.close()
+        except RuntimeError:
+            pass
             
-        if hasattr(self, 'explanation_window') and self.explanation_window:
-            self.explanation_window.close()
+        try:
+            if hasattr(self, 'explanation_window') and self.explanation_window:
+                self.explanation_window.close()
+        except RuntimeError:
+            pass
             
         self.deleteLater()
         event.accept()
@@ -1651,6 +1669,8 @@ class StandaloneAIHandler(QObject):
             parent=mw
         )
         self.windows.append(window)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        window.destroyed.connect(lambda obj, w=window: self.windows.remove(w) if w in self.windows else None)
         window.show()
 
     def on_explanation_generated(self, result_data, extracted_text):
@@ -1661,6 +1681,8 @@ class StandaloneAIHandler(QObject):
             parent=mw
         )
         self.windows.append(window)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        window.destroyed.connect(lambda obj, w=window: self.windows.remove(w) if w in self.windows else None)
         window.show()
 
     def process_callback(self, extracted_text: str, task: str = "cloze") -> None:

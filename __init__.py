@@ -1606,23 +1606,35 @@ def launch_creator_viewer() -> None:
     creator_viewer.raise_()
     creator_viewer.activateWindow()
 
-text_to_cloze_viewer = None
-def launch_text_to_cloze() -> None:
-    global text_to_cloze_viewer
-    if not text_to_cloze_viewer:
-        text_to_cloze_viewer = TextToCardsWindow(task="cloze", parent=mw)
-    text_to_cloze_viewer.show()
-    text_to_cloze_viewer.raise_()
-    text_to_cloze_viewer.activateWindow()
+last_flashcard_type = "cloze"
 
-text_to_basic_viewer = None
-def launch_text_to_basic() -> None:
-    global text_to_basic_viewer
-    if not text_to_basic_viewer:
-        text_to_basic_viewer = TextToCardsWindow(task="basic", parent=mw)
-    text_to_basic_viewer.show()
-    text_to_basic_viewer.raise_()
-    text_to_basic_viewer.activateWindow()
+def ask_flashcard_type(parent) -> str:
+    global last_flashcard_type
+    items = ["Cloze", "Basic"]
+    current_index = items.index("Cloze" if last_flashcard_type == "cloze" else "Basic")
+    item, ok = QInputDialog.getItem(parent, "Flashcard Type", "Select the type of flashcard to create:", items, current_index, False)
+    if ok and item:
+        last_flashcard_type = "cloze" if item == "Cloze" else "basic"
+        return last_flashcard_type
+    return None
+
+text_to_cards_viewer = None
+def launch_text_to_flashcard() -> None:
+    task = ask_flashcard_type(mw)
+    if not task: return
+    global text_to_cards_viewer
+    if not text_to_cards_viewer:
+        text_to_cards_viewer = TextToCardsWindow(task=task, parent=mw)
+    else:
+        text_to_cards_viewer.task = task
+        title_type = "Cloze" if task == "cloze" else "Basic"
+        text_to_cards_viewer.setWindowTitle(f"PDFLinker - Text to {title_type}")
+        text_to_cards_viewer.label.setText(f"<b>Paste text below to generate {title_type.lower()} flashcards:</b>")
+        text_to_cards_viewer.text_edit.setPlaceholderText(f"Paste your notes or book text here.\\n\\nThe AI will automatically generate {title_type.lower()} flashcards from it...")
+        text_to_cards_viewer.generate_btn.setText(f"⚡ Generate {title_type}")
+    text_to_cards_viewer.show()
+    text_to_cards_viewer.raise_()
+    text_to_cards_viewer.activateWindow()
 
 text_to_explain_viewer = None
 def launch_text_to_explain() -> None:
@@ -1632,6 +1644,60 @@ def launch_text_to_explain() -> None:
     text_to_explain_viewer.show()
     text_to_explain_viewer.raise_()
     text_to_explain_viewer.activateWindow()
+
+class StandaloneAIHandler(QObject):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.windows = []
+        
+    def on_cards_generated(self, result_data, extracted_text, task):
+        window = GeneratedCardsWindow(
+            regenerate_callback=lambda txt: call_gemini_api(txt, task, mw, lambda res, ext: self.on_cards_generated(res, ext, task)),
+            cards_data=result_data,
+            extracted_text=extracted_text,
+            task=task,
+            parent=mw
+        )
+        self.windows.append(window)
+        window.show()
+
+    def on_explanation_generated(self, result_data, extracted_text):
+        window = ExplanationWindow(
+            main_viewer_callback=self.process_callback,
+            explanation_text=result_data,
+            extracted_text=extracted_text,
+            parent=mw
+        )
+        self.windows.append(window)
+        window.show()
+
+    def process_callback(self, extracted_text: str, task: str = "cloze") -> None:
+        if task in ("cloze", "flashcard", "basic"):
+            call_gemini_api(extracted_text, task, mw, lambda res, ext: self.on_cards_generated(res, ext, task))
+        elif task == "explain":
+            call_gemini_api(extracted_text, task, mw, self.on_explanation_generated)
+
+standalone_ai_handler = StandaloneAIHandler()
+
+def launch_url_or_youtube(task_type: str, is_youtube: bool) -> None:
+    prompt_str = "YouTube" if is_youtube else "URL"
+    if task_type == "flashcard":
+        task = ask_flashcard_type(mw)
+        if not task: return
+    else:
+        task = "explain"
+        
+    url, ok = QInputDialog.getText(mw, f"{prompt_str} ➔ {task.capitalize()}", f"Enter {prompt_str} URL:")
+    if ok and url.strip():
+        url_str = url.strip()
+        if not url_str.startswith("http") and not url_str.startswith("www."):
+            showInfo("Please enter a valid URL.")
+            return
+            
+        if task == "explain":
+            call_gemini_api(url_str, task, mw, standalone_ai_handler.on_explanation_generated)
+        else:
+            call_gemini_api(url_str, task, mw, lambda res, ext: standalone_ai_handler.on_cards_generated(res, ext, task))
 
 def open_config_dialog():
     dialog = ConfigDialog(mw)
@@ -1685,20 +1751,42 @@ def setup_gui():
     
     pdflinker_toolbar.addSeparator()
     
-    cloze_text_action = QAction("⚡ Text ➔ Cloze", mw)
-    cloze_text_action.setToolTip("Paste text from anywhere to generate fill-in-the-blank (Cloze) flashcards")
-    cloze_text_action.triggered.connect(launch_text_to_cloze)
-    pdflinker_toolbar.addAction(cloze_text_action)
-
-    basic_text_action = QAction("⚡ Text ➔ Basic", mw)
-    basic_text_action.setToolTip("Paste text from anywhere to generate Question/Answer (Basic) flashcards")
-    basic_text_action.triggered.connect(launch_text_to_basic)
-    pdflinker_toolbar.addAction(basic_text_action)
-
-    explain_text_action = QAction("🧠 Text ➔ Explain", mw)
-    explain_text_action.setToolTip("Paste difficult text to get a simplified AI explanation")
-    explain_text_action.triggered.connect(launch_text_to_explain)
-    pdflinker_toolbar.addAction(explain_text_action)
+    ai_tools_btn = QToolButton(mw)
+    ai_tools_btn.setText("🤖 AI Tools")
+    ai_tools_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+    ai_tools_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+    ai_menu = QMenu(ai_tools_btn)
+    
+    text_flashcard_action = QAction("📝 Text ➔ Flashcard", mw)
+    text_flashcard_action.triggered.connect(launch_text_to_flashcard)
+    ai_menu.addAction(text_flashcard_action)
+    
+    text_explain_action = QAction("🧠 Text ➔ Explain", mw)
+    text_explain_action.triggered.connect(launch_text_to_explain)
+    ai_menu.addAction(text_explain_action)
+    
+    ai_menu.addSeparator()
+    
+    url_flashcard_action = QAction("🔗 URL ➔ Flashcard", mw)
+    url_flashcard_action.triggered.connect(lambda: launch_url_or_youtube("flashcard", is_youtube=False))
+    ai_menu.addAction(url_flashcard_action)
+    
+    url_explain_action = QAction("🧠 URL ➔ Explain", mw)
+    url_explain_action.triggered.connect(lambda: launch_url_or_youtube("explain", is_youtube=False))
+    ai_menu.addAction(url_explain_action)
+    
+    ai_menu.addSeparator()
+    
+    yt_flashcard_action = QAction("📺 YouTube ➔ Flashcard", mw)
+    yt_flashcard_action.triggered.connect(lambda: launch_url_or_youtube("flashcard", is_youtube=True))
+    ai_menu.addAction(yt_flashcard_action)
+    
+    yt_explain_action = QAction("🧠 YouTube ➔ Explain", mw)
+    yt_explain_action.triggered.connect(lambda: launch_url_or_youtube("explain", is_youtube=True))
+    ai_menu.addAction(yt_explain_action)
+    
+    ai_tools_btn.setMenu(ai_menu)
+    pdflinker_toolbar.addWidget(ai_tools_btn)
 
     pdflinker_toolbar.addSeparator()
 

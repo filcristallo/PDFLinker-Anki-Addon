@@ -1439,13 +1439,22 @@ class PDFViewerWindow(QMainWindow):
             self.setWindowTitle("PDFLinker Reader (Review Mode)")
             self.resize(800, 1000)
 
-        flashcard_action = QAction("⚡ Generate Flashcard", self)
+        ai_tools_btn = QToolButton(self)
+        ai_tools_btn.setText("🤖 AI Tools")
+        ai_tools_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        ai_tools_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        ai_menu = QMenu(ai_tools_btn)
+        
+        flashcard_action = QAction("📝 Text ➔ Flashcard", self)
         flashcard_action.triggered.connect(self.generate_flashcard_current_page)
-        toolbar.addAction(flashcard_action)
+        ai_menu.addAction(flashcard_action)
 
-        explain_action = QAction("🧠 Explain", self)
+        explain_action = QAction("🧠 Text ➔ Explain", self)
         explain_action.triggered.connect(self.explain_current_page)
-        toolbar.addAction(explain_action)
+        ai_menu.addAction(explain_action)
+        
+        ai_tools_btn.setMenu(ai_menu)
+        toolbar.addWidget(ai_tools_btn)
         
         toolbar.addSeparator()
         
@@ -1676,26 +1685,6 @@ class StandaloneAIHandler(QObject):
 
 standalone_ai_handler = StandaloneAIHandler()
 
-def launch_url_or_youtube(task_type: str, is_youtube: bool) -> None:
-    prompt_str = "YouTube" if is_youtube else "URL"
-    if task_type == "flashcard":
-        task = ask_flashcard_type(mw)
-        if not task: return
-    else:
-        task = "explain"
-        
-    url, ok = QInputDialog.getText(mw, f"{prompt_str} ➔ {task.capitalize()}", f"Enter {prompt_str} URL:")
-    if ok and url.strip():
-        url_str = url.strip()
-        if not url_str.startswith("http") and not url_str.startswith("www."):
-            showInfo("Please enter a valid URL.")
-            return
-            
-        if task == "explain":
-            call_gemini_api(url_str, task, mw, standalone_ai_handler.on_explanation_generated, enable_search=True)
-        else:
-            call_gemini_api(url_str, task, mw, lambda res, ext: standalone_ai_handler.on_cards_generated(res, ext, task), enable_search=True)
-
 def open_config_dialog():
     dialog = ConfigDialog(mw)
     dialog.exec()
@@ -1763,24 +1752,6 @@ def setup_gui():
     ai_menu.addAction(text_explain_action)
     
     ai_menu.addSeparator()
-    
-    url_flashcard_action = QAction("🔗 URL ➔ Flashcard", mw)
-    url_flashcard_action.triggered.connect(lambda: launch_url_or_youtube("flashcard", is_youtube=False))
-    ai_menu.addAction(url_flashcard_action)
-    
-    url_explain_action = QAction("🧠 URL ➔ Explain", mw)
-    url_explain_action.triggered.connect(lambda: launch_url_or_youtube("explain", is_youtube=False))
-    ai_menu.addAction(url_explain_action)
-    
-    ai_menu.addSeparator()
-    
-    yt_flashcard_action = QAction("📺 YouTube ➔ Flashcard", mw)
-    yt_flashcard_action.triggered.connect(lambda: launch_url_or_youtube("flashcard", is_youtube=True))
-    ai_menu.addAction(yt_flashcard_action)
-    
-    yt_explain_action = QAction("🧠 YouTube ➔ Explain", mw)
-    yt_explain_action.triggered.connect(lambda: launch_url_or_youtube("explain", is_youtube=True))
-    ai_menu.addAction(yt_explain_action)
     
     ai_tools_btn.setMenu(ai_menu)
     pdflinker_toolbar.addWidget(ai_tools_btn)

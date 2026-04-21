@@ -36,7 +36,7 @@ USER_FILES_DIR = os.path.join(ADDON_DIR, "user_files")
 CACHE_FILE = os.path.join(USER_FILES_DIR, "pdf_cache.json")
 CONFIG_PATH = os.path.join(ADDON_DIR, "config.json")
 
-PDFJS_RELEASE_URL = "https://github.com/mozilla/pdf.js/releases/download/v3.11.174/pdfjs-3.11.174-dist.zip"
+PDFJS_RELEASE_URL = "https://github.com/mozilla/pdf.js/releases/download/v4.3.136/pdfjs-4.3.136-legacy-dist.zip"
 GITHUB_URL = "https://github.com/filcristallo/PDFLinker-Anki-Addon"
 BUY_ME_COFFEE_URL = "https://www.buymeacoffee.com/filippocristallo"
 
@@ -69,6 +69,29 @@ def setup_dependencies() -> None:
             urllib.request.urlretrieve(PDFJS_RELEASE_URL, zip_path)
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(PDFJS_DIR)
+                
+            # --- PATCH: Enable Highlight Editor ---
+            viewer_mjs_path = os.path.join(PDFJS_DIR, "web", "viewer.mjs")
+            if os.path.exists(viewer_mjs_path):
+                try:
+                    with open(viewer_mjs_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                        
+                    # Enable the highlight editor button
+                    content = re.sub(r'enableHighlightEditor:\s*\{\s*value:\s*false', 'enableHighlightEditor: { value: true', content)
+                    content = re.sub(r'enableHighlightEditor:\s*false', 'enableHighlightEditor: true', content)
+                    
+                    # Force the default mode to HIGHLIGHT (9) instead of NONE (0)
+                    content = re.sub(r'let annotationEditorMode = AnnotationEditorType\.NONE', 'let annotationEditorMode = 9 /* AnnotationEditorType.HIGHLIGHT */', content)
+                    content = re.sub(r'#annotationEditorMode = AnnotationEditorType\.NONE', '#annotationEditorMode = 9 /* AnnotationEditorType.HIGHLIGHT */', content)
+                    content = re.sub(r'this\.#annotationEditorMode = options\.annotationEditorMode \?\? AnnotationEditorType\.NONE', 'this.#annotationEditorMode = options.annotationEditorMode ?? 9 /* AnnotationEditorType.HIGHLIGHT */', content)
+                    
+                    with open(viewer_mjs_path, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    logger.info("Successfully patched viewer.mjs to enable highlighting.")
+                except Exception as patch_e:
+                    logger.error(f"Failed to patch viewer.mjs: {patch_e}")
+                    
         finally:
             if os.path.exists(zip_path):
                 os.remove(zip_path)

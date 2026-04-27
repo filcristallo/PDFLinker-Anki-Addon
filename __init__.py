@@ -168,7 +168,7 @@ def clean_ai_text(text: str) -> str:
     try:
         import markdown
         return markdown.markdown(text.strip(), extensions=['tables'])
-    except ImportError:
+    except Exception:
         pass
 
     text = text.strip()
@@ -233,18 +233,22 @@ def auto_fill_open_editors(path: str, page: str) -> None:
     for widget in mw.app.topLevelWidgets():
         editor = getattr(widget, 'editor', None)
         if editor and getattr(editor, 'note', None):
-            note = editor.note
-            changed = False
+            def update_note(ed=editor):
+                note = ed.note
+                changed = False
+                
+                if "PDF_Path" in note and note["PDF_Path"] != path:
+                    note["PDF_Path"] = path
+                    changed = True
+                if "PDF_Page" in note and note["PDF_Page"] != str(page):
+                    note["PDF_Page"] = str(page)
+                    changed = True
+                
+                if changed:
+                    ed.loadNote()
             
-            if "PDF_Path" in note and note["PDF_Path"] != path:
-                note["PDF_Path"] = path
-                changed = True
-            if "PDF_Page" in note and note["PDF_Page"] != str(page):
-                note["PDF_Page"] = str(page)
-                changed = True
-            
-            if changed:
-                editor.loadNote()
+            # Use saveNow to ensure we don't wipe out un-saved fields the user might be typing
+            editor.saveNow(update_note)
 
 class CustomWebPage(QWebEnginePage):
     """
@@ -439,13 +443,19 @@ def call_gemini_api(extracted_text: str, task: str, parent_window: QWidget, on_s
             if task in ("cloze", "flashcard", "basic"):
                 # Clean up markdown formatting if the AI mistakenly outputs it instead of raw JSON
                 cleaned_text = content_text.strip()
-                if cleaned_text.startswith("```json"):
-                    cleaned_text = cleaned_text[7:]
-                elif cleaned_text.startswith("```"):
-                    cleaned_text = cleaned_text[3:]
-                if cleaned_text.endswith("```"):
-                    cleaned_text = cleaned_text[:-3]
-                cleaned_text = cleaned_text.strip()
+                
+                # Robust extraction of JSON array in case the AI wraps it in conversational text
+                match = re.search(r'\[.*\]', cleaned_text, re.DOTALL)
+                if match:
+                    cleaned_text = match.group(0)
+                else:
+                    if cleaned_text.startswith("```json"):
+                        cleaned_text = cleaned_text[7:]
+                    elif cleaned_text.startswith("```"):
+                        cleaned_text = cleaned_text[3:]
+                    if cleaned_text.endswith("```"):
+                        cleaned_text = cleaned_text[:-3]
+                    cleaned_text = cleaned_text.strip()
 
                 cards_data = json.loads(cleaned_text)
                 for card in cards_data:
@@ -843,36 +853,39 @@ class GeneratedCardsWindow(QMainWindow):
             tooltip("Please open the 'Add' window in Anki first.")
             return
             
-        note = add_window.editor.note
-        changed = False
-        
         final_text = self.get_anki_html(text_edit)
         final_extra = self.get_anki_html(extra_edit) if import_extra_cb.isChecked() else ""
         
         text_fields = ["Text", "Front", "Question"]
         extra_fields = ["Extra", "Back", "Answer"]
         
-        for field in note.keys():
-            if field in text_fields or field.lower() == "text":
-                note[field] = final_text
-                changed = True
-            elif field in extra_fields or field.lower() == "extra":
-                note[field] = final_extra if import_extra_cb.isChecked() else ""
-                changed = True
+        def update_note():
+            note = add_window.editor.note
+            changed = False
+            for field in note.keys():
+                if field in text_fields or field.lower() == "text":
+                    note[field] = final_text
+                    changed = True
+                elif field in extra_fields or field.lower() == "extra":
+                    note[field] = final_extra if import_extra_cb.isChecked() else ""
+                    changed = True
+                    
+            if changed:
+                add_window.editor.loadNote()
+                tooltip("Fields updated in Add Window!")
+                widget_to_style.setStyleSheet("""
+                    #cardContainer {
+                        background-color: rgba(128, 128, 128, 0.15);
+                        border-radius: 8px;
+                        border: 1px solid #4CAF50;
+                    }
+                """)
+                track_action()
+            else:
+                tooltip("Could not find suitable fields (e.g., 'Text', 'Extra') in the current Note Type.")
                 
-        if changed:
-            add_window.editor.loadNote()
-            tooltip("Fields updated in Add Window!")
-            widget_to_style.setStyleSheet("""
-                #cardContainer {
-                    background-color: rgba(128, 128, 128, 0.15);
-                    border-radius: 8px;
-                    border: 1px solid #4CAF50;
-                }
-            """)
-            track_action()
-        else:
-            tooltip("Could not find suitable fields (e.g., 'Text', 'Extra') in the current Note Type.")
+        # Use saveNow to avoid wiping out user changes in other fields
+        add_window.editor.saveNow(update_note)
 
 
 class ExplanationWindow(QMainWindow):
